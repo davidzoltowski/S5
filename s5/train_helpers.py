@@ -294,27 +294,23 @@ def prep_batch(batch: tuple,
     # Convert to JAX.
     inputs = np.asarray(inputs.numpy())
 
-    # Grab lengths from aux if it is there.
-    lengths = aux_data.get('lengths', None)
+    # Grab neural padding and sentence padding
+    neural_pad = aux_data['neural_pad']
+    sentence_pad = aux_data['sentence_pad']
 
     # Make all batches have same sequence length
     num_pad = seq_len - inputs.shape[1]
     if num_pad > 0:
         # Assuming vocab padding value is zero
         inputs = np.pad(inputs, ((0, 0), (0, num_pad)), 'constant', constant_values=(0,))
+        raise RuntimeError("BCI: We should not be getting into this situation.")
 
     # Inputs is either [n_batch, seq_len] or [n_batch, seq_len, in_dim].
     # If there are not three dimensions and trailing dimension is not equal to in_dim then
     # transform into one-hot.  This should be a fairly reliable fix.
     if (inputs.ndim < 3) and (inputs.shape[-1] != in_dim):
         inputs = one_hot(np.asarray(inputs), in_dim)
-
-    # If there are lengths, bundle them up.
-    if lengths is not None:
-        lengths = np.asarray(lengths.numpy())
-        full_inputs = (inputs.astype(float), lengths.astype(float))
-    else:
-        full_inputs = inputs.astype(float)
+        raise RuntimeError("BCI: We should not be getting into this situation.")
 
     # Convert and apply.
     targets = np.array(targets.numpy())
@@ -325,7 +321,7 @@ def prep_batch(batch: tuple,
     else:
         integration_timesteps = np.ones((len(inputs), seq_len))
 
-    return full_inputs, targets.astype(float), integration_timesteps
+    return inputs, targets.astype(float), integration_timesteps, neural_pad, sentence_pad
 
 
 def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_params):
@@ -339,7 +335,7 @@ def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_p
     decay_function, ssm_lr, lr, step, end_step, opt_config, lr_min = lr_params
 
     for batch_idx, batch in enumerate(tqdm(trainloader)):
-        inputs, labels, integration_times = prep_batch(batch, seq_len, in_dim)
+        inputs, labels, integration_times, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
         rng, drop_rng = jax.random.split(rng)
         state, loss = train_step(
             state,
@@ -347,6 +343,8 @@ def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_p
             inputs,
             labels,
             integration_times,
+            neural_pad,
+            sentence_pad,
             model,
             batchnorm,
         )
@@ -378,6 +376,8 @@ def train_step(state,
                batch_inputs,
                batch_labels,
                batch_integration_timesteps,
+               batch_neural_pad,
+               batch_sentence_pad,
                model,
                batchnorm,
                ):
@@ -399,7 +399,7 @@ def train_step(state,
                 mutable=["intermediates"],
             )
 
-        loss = np.mean(cross_entropy_loss(logits, batch_labels))
+        loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
 
         return loss, (mod_vars, logits)
 
