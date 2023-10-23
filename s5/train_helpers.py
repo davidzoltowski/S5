@@ -283,20 +283,11 @@ def prep_batch(batch: tuple,
     :param in_dim:      (int) dimension of input.
     :return:
     """
-    if len(batch) == 2:
-        inputs, targets = batch
-        aux_data = {}
-    elif len(batch) == 3:
-        inputs, targets, aux_data = batch
-    else:
-        raise RuntimeError("Err... not sure what I should do... Unhandled data type. ")
+
+    inputs, targets, neural_pad, sentence_pad = batch
 
     # Convert to JAX.
     inputs = np.asarray(inputs.numpy())
-
-    # Grab neural padding and sentence padding
-    neural_pad = aux_data['neural_pad']
-    sentence_pad = aux_data['sentence_pad']
 
     # Make all batches have same sequence length
     num_pad = seq_len - inputs.shape[1]

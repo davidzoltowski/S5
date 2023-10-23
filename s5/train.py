@@ -7,7 +7,7 @@ import wandb
 from .train_helpers import create_train_state, reduce_lr_on_plateau,\
     linear_warmup, cosine_annealing, constant_lr, train_epoch, validate
 from .dataloading import Datasets
-from .seq_model import BatchClassificationModel, RetrievalModel
+from .seq_model import BatchClassificationModel, RetrievalModel, BatchSpeechBCIDecoderModel
 from .ssm import init_S5SSM
 from .ssm_init import make_DPLR_HiPPO
 
@@ -107,26 +107,8 @@ def train(args):
                              clip_eigs=args.clip_eigs,
                              bidirectional=args.bidirectional)
 
-    if retrieval:
-        # Use retrieval head for AAN task
-        print("Using Retrieval head for {} task".format(args.dataset))
-        model_cls = partial(
-            RetrievalModel,
-            ssm=ssm_init_fn,
-            d_output=n_classes,
-            d_model=args.d_model,
-            n_layers=args.n_layers,
-            padded=padded,
-            activation=args.activation_fn,
-            dropout=args.p_dropout,
-            prenorm=args.prenorm,
-            batchnorm=args.batchnorm,
-            bn_momentum=args.bn_momentum,
-        )
-
-    else:
-        model_cls = partial(
-            BatchClassificationModel,
+    model_cls = partial(
+            BatchSpeechBCIDecoderModel,
             ssm=ssm_init_fn,
             d_output=n_classes,
             d_model=args.d_model,
@@ -138,7 +120,7 @@ def train(args):
             prenorm=args.prenorm,
             batchnorm=args.batchnorm,
             bn_momentum=args.bn_momentum,
-        )
+    )
 
     # initialize training state
     state = create_train_state(model_cls,
