@@ -410,7 +410,7 @@ class BCIDataset(Dataset):
     # Columns [:, :128] on each and concatenate them horizontally. Padding will
     # then be added. However, we will keep track of padding througha padding
     # matrix which denotes 0 if real data and 1 if padded data.
-    # Will create the sentence padding matrix as well. 
+    # Will create the sentence padding matrix as well.
     def stack_padding(tx1, spikePow, sentenceText, n_samples):
       # find the longest sentence (matrix with most rows)
       max_row = max(tx1[:].T, key=len).__len__()
@@ -429,12 +429,11 @@ class BCIDataset(Dataset):
         # Will stack spikePow horizontally with tx1 with tx1 at [:128]
         temp = np.hstack((tx1[i][:, :128], spikePow[i][:, :128]))
         neural_data[i, :sequence_length, :] = temp
-
       return neural_data, neural_padding, sentence_padding
 
     # Convert each character into ASCHII
     temp = []
-    for sentence in self.sentenceText:
+    for sentence in xy['sentenceText']:
       temp.append(np.array(list(map(ord, sentence))))
     self.setenceText = torch.from_numpy(np.array(temp))
 
@@ -443,12 +442,14 @@ class BCIDataset(Dataset):
 
     # Create the Neural and Sentence Data and Padding
     self.neural_data, self.neural_padding, self.setence_padding = stack_padding(np.array(xy['tx1']), np.array(xy['spikePow']), np.array(xy['sentenceText']), self.n_samples)
+    # import pdb; pdb.set_trace()
     self.neural_data = torch.from_numpy(np.array(self.neural_data))
     self.neural_padding = torch.from_numpy(np.array(self.neural_padding))
+    self.setence_padding = torch.from_numpy(np.array(self.setence_padding))
 
   # Output neural data, sentences, and the padding as auxillary data
   def __getitem__(self, index):
-    return self.neural_data, self.setenceText[index], (self.neural_padding, self.setence_padding)
+    return self.neural_data[index], self.setenceText[index], self.neural_padding[index], self.setence_padding[index]
 
   def __len__(self):
     return self.n_samples
