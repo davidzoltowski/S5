@@ -386,7 +386,8 @@ def create_pmnist_classification_dataset(cache_dir: Union[str, Path] = DEFAULT_C
 	aux_loaders = {}
 	return trn_loader, val_loader, tst_loader, aux_loaders, N_CLASSES, SEQ_LENGTH, IN_DIM, TRAIN_SIZE
 
-# Code with regards to the BCI dataset (no updates from meeting 10/16)
+#**Maxwell Kounga**
+
 import torch
 import torchvision
 from torch.utils.data import Dataset, DataLoader
@@ -396,54 +397,70 @@ import timeit
 import itertools
 from scipy.io import loadmat
 from array import array
+import jax.numpy as jnp
 
-
+# This turns the data into something that can be handled by the pytorch Data
+# loader.
 class BCIDataset(Dataset):
   def __init__(self, path):
     # data loading
     xy = loadmat(path, squeeze_me=True)
 
-    # Figure out padding, to create array to input
-    def stack_padding(it):
-      def resize(row, size):
-          new = np.array(row)
-          # This also restricts are array of interest.
-          new.resize(128, size)
-          return new
+    # This will manipulate the tx1 and Spikepow matrices to gather the relevent
+    # Columns [:, :128] on each and concatenate them horizontally. Padding will
+    # then be added. However, we will keep track of padding througha padding
+    # matrix which denotes 0 if real data and 1 if padded data.
+    # Will create the sentence padding matrix as well. 
+    def stack_padding(tx1, spikePow, sentenceText, n_samples):
+      # find the longest sentence (matrix with most rows)
+      max_row = max(tx1[:].T, key=len).__len__()
+      max_char = max(sentenceText[:], key=len).__len__()
+      neural_padding = jnp.zeros((n_samples, max_row, 256))
+      sentence_padding = jnp.zeros((n_samples, max_char))
+      neural_data = np.zeros((n_samples, max_row, 256))
 
-      # find longest row length
-      row_length = max(it[:], key=len).__len__()
-      mat = np.array( [resize(row, row_length) for row in it] )
-      return mat
+      for i in range(n_samples):
+        # Finds the length of the given sequences and sentences.
+        sequence_length = np.shape(tx1[i])[0]
+        sentence_length = max(sentenceText[i].find('.'), sentenceText[i].find('?'))
+        sentence_padding = sentence_padding.at[i, (sentence_length + 1):].set(1.0)
+        neural_padding = neural_padding.at[i, sequence_length:, :].set(1.0)
 
-    # Pytorch cannot create a tensor from strings so convert to ASCHII
-    self.setenceText = []
-    for sentence in xy['sentenceText'][:]:
-      self.setenceText.append(np.array(list(map(ord, sentence))))
-      # Assign each character to an integers, use the same punctation that nptl uess.
-      # Look up the dictionary that they're using to get the sentence phonemes. (At sometime)
-    self.setenceText = torch.from_numpy(np.array(self.setenceText))
+        # Will stack spikePow horizontally with tx1 with tx1 at [:128]
+        temp = np.hstack((tx1[i][:, :128], spikePow[i][:, :128]))
+        neural_data[i, :sequence_length, :] = temp
 
+      return neural_data, neural_padding, sentence_padding
 
-    self.tx1 = torch.from_numpy(stack_padding(np.array(xy['tx1'])))
-    self.spikePow = torch.from_numpy(stack_padding(np.array(xy['spikePow'])))
-    # padding of feature which is passed on (For each sentence there will be one length)
-    # 0 is valid and 1 is padded. Pad sentences
+    # Convert each character into ASCHII
+    temp = []
+    for sentence in self.sentenceText:
+      temp.append(np.array(list(map(ord, sentence))))
+    self.setenceText = torch.from_numpy(np.array(temp))
+
+    # Number of Samples
     self.n_samples = xy['sentenceText'].shape[0]
 
-  # Output padding as aux_data
+    # Create the Neural and Sentence Data and Padding
+    self.neural_data, self.neural_padding, self.setence_padding = stack_padding(np.array(xy['tx1']), np.array(xy['spikePow']), np.array(xy['sentenceText']), self.n_samples)
+    self.neural_data = torch.from_numpy(np.array(self.neural_data))
+    self.neural_padding = torch.from_numpy(np.array(self.neural_padding))
+
+  # Output neural data, sentences, and the padding as auxillary data
   def __getitem__(self, index):
-    return [self.tx1[index], self.spikePow[index]], self.setenceText[index]
+    return self.neural_data, self.setenceText[index], (self.neural_padding, self.setence_padding)
 
   def __len__(self):
     return self.n_samples
 
-# Example interface for making a loader.
+ # BCI Dataloader meant to call the DataLoader function.
 def BCIData_loader(cache_dir: str,
 				  bsz: int = 50,
 				  seed: int = 42,
           shuffle: bool = True):
 
+  # This is because we are only going through one file. This will be changed
+  # when we want to iterate through the whole folder.
   train_str = str(cache_dir) + "train/t12.2022.05.24.mat"
   test_str = str(cache_dir) + "test/t12.2022.05.24.mat"
 
@@ -458,15 +475,17 @@ def BCIData_loader(cache_dir: str,
   neuralData_train, labels_train = trainDataset[0]
   neuralData_test, labels_test = testDataset[0]
 
-  # Not sure what these variables exactly code for.
   N_CLASSES = len(labels_train) + len(labels_test)
-  # Would be one or the other
-  SEQ_LENGTH = max(len(tx1_train[0]),len(tx1_test[0]))
-  IN_DIM = 256  # Guessing
+
+  # Would be one or the other, determine at some point.
+  SEQ_LENGTH = max(len(neuralData_train[0]),len(neuralData_test[0]))
+  IN_DIM = 256
   TRAIN_SIZE = len(labels_train)
+
+  # ToDo, add an aux loader to deal with padding.
   aux_loader = {}
 
-  return trainloader, valloader, testloader, aux_loader, N_CLASSES, SEQ_LENGTH, IN_DIM, TRAIN_SIZE
+  return trainloader, valloader, testloader, aux_loader, N_CLASSES, SEQ_LENGTH, IN_DIM, TRAIN_SIZE   
 
 Datasets = {
 	# Other loaders.
