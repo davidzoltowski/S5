@@ -408,7 +408,7 @@ class BCIDataset(Dataset):
 
     # This will manipulate the tx1 and Spikepow matrices to gather the relevent
     # Columns [:, :128] on each and concatenate them horizontally. Padding will
-    # then be added. However, we will keep track of padding througha padding
+    # then be added. However, we will keep track of padding through a padding
     # matrix which denotes 0 if real data and 1 if padded data.
     # Will create the sentence padding matrix as well.
     def stack_padding(tx1, spikePow, sentenceText, n_samples):
@@ -454,7 +454,7 @@ class BCIDataset(Dataset):
   def __len__(self):
     return self.n_samples
 
- # BCI Dataloader meant to call the DataLoader function.
+# BCI Dataloader meant to call the DataLoader function.
 def BCIData_loader(cache_dir: str,
 				  bsz: int = 50,
 				  seed: int = 42,
@@ -473,13 +473,13 @@ def BCIData_loader(cache_dir: str,
   valloader = None
 
   # Stack the tx1 and spikePow earlier
-  neuralData_train, labels_train = trainDataset[0]
-  neuralData_test, labels_test = testDataset[0]
+  neuralData_train, labels_train, neural_padding, sentence_padding = trainDataset[0]
+  neuralData_test, labels_test, neural_padding, sentence_padding = testDataset[0]
 
   N_CLASSES = len(labels_train) + len(labels_test)
 
   # Would be one or the other, determine at some point.
-  SEQ_LENGTH = max(len(neuralData_train[0]),len(neuralData_test[0]))
+  SEQ_LENGTH = [neuralData_train.shape[0],neuralData_test.shape[0]]
   IN_DIM = 256
   TRAIN_SIZE = len(labels_train)
 
@@ -493,7 +493,7 @@ Datasets = {
 	"mnist-classification": create_mnist_classification_dataset,
 	"pmnist-classification": create_pmnist_classification_dataset,
 	"cifar-classification": create_cifar_classification_dataset,
-  "BCI-classification": BCIData_loader,
+  	"BCI-classification": BCIData_loader,
 
 	# LRA.
 	"imdb-classification": create_lra_imdb_classification_dataset,

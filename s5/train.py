@@ -70,6 +70,9 @@ def train(args):
     trainloader, valloader, testloader, aux_dataloaders, n_classes, seq_len, in_dim, train_size = \
       create_dataset_fn(args.dir_name, seed=args.jax_seed, bsz=args.bsz)
 
+    # Getting the training sequence length
+    seq_len = seq_len[0]
+
     print(f"[*] Starting S5 Training on `{args.dataset}` =>> Initializing...")
 
     # Initialize state matrix A using approximation to HiPPO-LegS matrix
