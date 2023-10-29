@@ -352,8 +352,10 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
     model = model(training=False, step_rescale=step_rescale)
     losses, accuracies, preds = np.array([]), np.array([]), np.array([])
     for batch_idx, batch in enumerate(tqdm(testloader)):
-        inputs, labels, integration_timesteps = prep_batch(batch, seq_len, in_dim)
-        loss, acc, pred = eval_step(inputs, labels, integration_timesteps, state, model, batchnorm)
+        # inputs, labels, integration_timesteps = prep_batch(batch, seq_len, in_dim)
+        inputs, labels, integration_times, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
+        loss, acc, pred = \
+            eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad)
         losses = np.append(losses, loss)
         accuracies = np.append(accuracies, acc)
 
@@ -410,6 +412,8 @@ def eval_step(batch_inputs,
               state,
               model,
               batchnorm,
+              batch_neural_pad,
+              batch_sentence_pad
               ):
     if batchnorm:
         logits = model.apply({"params": state.params, "batch_stats": state.batch_stats},
@@ -420,7 +424,8 @@ def eval_step(batch_inputs,
                              batch_inputs, batch_integration_timesteps,
                              )
 
-    losses = cross_entropy_loss(logits, batch_labels)
+    # losses = cross_entropy_loss(logits, batch_labels)
+    losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
     accs = compute_accuracy(logits, batch_labels)
 
     return losses, accs, logits

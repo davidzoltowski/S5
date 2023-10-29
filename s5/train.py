@@ -70,9 +70,6 @@ def train(args):
     trainloader, valloader, testloader, aux_dataloaders, n_classes, seq_len, in_dim, train_size = \
       create_dataset_fn(args.dir_name, seed=args.jax_seed, bsz=args.bsz)
 
-    # Getting the training sequence length
-    seq_len = seq_len[0]
-
     print(f"[*] Starting S5 Training on `{args.dataset}` =>> Initializing...")
 
     # Initialize state matrix A using approximation to HiPPO-LegS matrix
@@ -173,7 +170,7 @@ def train(args):
                                               skey,
                                               model_cls,
                                               trainloader,
-                                              seq_len,
+                                              seq_len[0],
                                               in_dim,
                                               args.batchnorm,
                                               lr_params)
@@ -208,7 +205,7 @@ def train(args):
             val_loss, val_acc = validate(state,
                                          model_cls,
                                          testloader,
-                                         seq_len,
+                                         seq_len[1],
                                          in_dim,
                                          args.batchnorm)
 
@@ -241,13 +238,13 @@ def train(args):
                 val2_loss, val2_acc = validate(state,
                                                model_cls,
                                                aux_dataloaders['valloader2'],
-                                               int(seq_len // 2),
+                                               int(seq_len[1] // 2),
                                                in_dim,
                                                args.batchnorm,
                                                step_rescale=2.0)
 
                 print(f"[*] Running Epoch {epoch + 1} Res 2 Test...")
-                test2_loss, test2_acc = validate(state, model_cls, aux_dataloaders['testloader2'], int(seq_len // 2), in_dim, args.batchnorm, step_rescale=2.0)
+                test2_loss, test2_acc = validate(state, model_cls, aux_dataloaders['testloader2'], int( seq_len[1] // 2), in_dim, args.batchnorm, step_rescale=2.0)
                 print(f"\n=>> Epoch {epoch + 1} Res 2 Metrics ===")
                 print(
                     f"\tVal2 Loss: {val2_loss:.5f} --Test2 Loss: {test2_loss:.5f} --"
