@@ -129,7 +129,7 @@ def train(args):
                                retrieval,
                                in_dim=in_dim,
                                bsz=args.bsz,
-                               seq_len=seq_len,
+                               seq_len=seq_len[0],
                                weight_decay=args.weight_decay,
                                batchnorm=args.batchnorm,
                                opt_config=args.opt_config,

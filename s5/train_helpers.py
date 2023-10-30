@@ -307,10 +307,10 @@ def prep_batch(batch: tuple,
     targets = np.array(targets.numpy())
 
     # If there is an aux channel containing the integration times, then add that.
-    if 'timesteps' in aux_data.keys():
-        integration_timesteps = np.diff(np.asarray(aux_data['timesteps'].numpy()))
-    else:
-        integration_timesteps = np.ones((len(inputs), seq_len))
+    # if 'timesteps' in aux_data.keys():
+    #     integration_timesteps = np.diff(np.asarray(aux_data['timesteps'].numpy()))
+    # else:
+    integration_timesteps = np.ones((len(inputs), seq_len))
 
     return inputs, targets.astype(float), integration_timesteps, neural_pad, sentence_pad
 

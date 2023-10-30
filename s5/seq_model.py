@@ -355,6 +355,7 @@ class SpeechBCIDecoderModel(nn.Module):
     activation: str = "gelu"
     dropout: float = 0.2
     training: bool = True
+    mode: str = "pool"
     prenorm: bool = False
     batchnorm: bool = False
     bn_momentum: float = 0.9
@@ -387,9 +388,18 @@ class SpeechBCIDecoderModel(nn.Module):
         Returns:
             output (float32): (d_output)
         """
-        if self.padded:
-            x, length = x  # input consists of data and prepadded seq lens
+        # Removed to figure out error (10/29)
+        # if self.padded:
+        #     x, length = x  # input consists of data and prepadded seq lens
         x = self.encoder(x, integration_timesteps)
+        # Added to figure out the error (10/29)
+        if self.mode in ["pool"]:
+            # Perform mean pooling across time
+            if self.padded:
+                x = masked_meanpool(x, length)
+            else:
+                x = np.mean(x, axis=0)
+
         x = self.decoder(x)
         return nn.log_softmax(x, axis=-1)
 
@@ -400,3 +410,4 @@ BatchSpeechBCIDecoderModel = nn.vmap(
     out_axes=0,
     variable_axes={"params": None, "dropout": None, 'batch_stats': None, "cache": 0, "prime": None},
     split_rngs={"params": False, "dropout": True}, axis_name='batch')
+
