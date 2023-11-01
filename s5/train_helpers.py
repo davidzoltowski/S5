@@ -6,7 +6,7 @@ from tqdm import tqdm
 from flax.training import train_state
 import optax
 from typing import Any, Tuple
-
+from optax import ctc_loss
 
 # LR schedulers
 def linear_warmup(step, base_lr, end_step, lr_min=None):
