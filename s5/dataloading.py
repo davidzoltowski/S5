@@ -398,6 +398,7 @@ import itertools
 from scipy.io import loadmat
 from array import array
 import jax.numpy as jnp
+from g2p_en import G2p
 
 # This turns the data into something that can be handled by the pytorch Data
 # loader.
@@ -406,14 +407,14 @@ class BCIDataset(Dataset):
     # data loading
     xy = loadmat(path, squeeze_me=True)
 
-    # # TEMPORARILY MAKE DATASET SMALLER FOR DEBUGGING
-    # xy['tx1'] = xy['tx1'][:64]
-    # xy['spikePow'] = xy['spikePow'][:64]
-    # xy['sentenceText'] = xy['sentenceText'][:64]
+    # TEMPORARILY MAKE DATASET SMALLER FOR DEBUGGING
+    xy['tx1'] = xy['tx1'][:64]
+    xy['spikePow'] = xy['spikePow'][:64]
+    xy['sentenceText'] = xy['sentenceText'][:64]
 
     # This will manipulate the tx1 and Spikepow matrices to gather the relevent
     # Columns [:, :128] on each and concatenate them horizontally. Padding will
-    # then be added. However, we will keep track of padding through a padding
+    # then be added. However, we will keep track of padding througha padding
     # matrix which denotes 0 if real data and 1 if padded data.
     # Will create the sentence padding matrix as well.
     def stack_padding(tx1, spikePow, sentenceText, n_samples):
@@ -423,37 +424,55 @@ class BCIDataset(Dataset):
       neural_padding = jnp.zeros((n_samples, max_row))
       sentence_padding = jnp.zeros((n_samples, max_char))
       neural_data = np.zeros((n_samples, max_row, 256))
+      sentence_data = np.zeros((n_samples, max_char))
 
       for i in range(n_samples):
         # Finds the length of the given sequences and sentences.
         sequence_length = np.shape(tx1[i])[0]
-        sentence_length = max(sentenceText[i].find('.'), sentenceText[i].find('?'))
-        sentence_padding = sentence_padding.at[i, (sentence_length + 1):].set(1.0)
+        sentence_length = len(sentenceText[i])
+        sentence_padding = sentence_padding.at[i, sentence_length:].set(1.0)
         neural_padding = neural_padding.at[i, sequence_length:].set(1.0)
 
         # Will stack spikePow horizontally with tx1 with tx1 at [:128]
         temp = np.hstack((tx1[i][:, :128], spikePow[i][:, :128]))
         neural_data[i, :sequence_length, :] = temp
-      return neural_data, neural_padding, sentence_padding
+        sentence_data[i, :sentence_length] = sentenceText[i]
+      return neural_data, sentence_data, neural_padding, sentence_padding
 
-    # Convert each character into ASCHII
-    temp = []
-    for sentence in xy['sentenceText']:
-      temp.append(np.array(list(map(ord, sentence))))
-    self.setenceText = torch.from_numpy(np.array(temp))
+    # This will convert each sentence into phonemes and then index the phonemes
+    def text_conversion(sentenceText):
+      g2p = G2p()
+      temp = []
+      Alphabet = ["", "AA", "AE", "AH","AO","AW", "AY", "EH", "ER","EY","IH", "IY","OW","OY", "UH",\
+                  "UW", "B", "CH", "D", "DH", "F", "G", "HH", "JH", "K", "L", "M", "N", "NG",\
+                  "P", "R", "S", "SH", "T", "TH", "V", "W", "Y", "Z", "ZH", " ", ".", ",", "?", "'"]
+      for sentence in sentenceText:
+        current = []
+        sentence = g2p(sentence)
+        for word in sentence:
+          # remove stress mark
+          if word.find("0") != -1 or word.find("1") != -1 or word.find("2") != -1:
+            word = word[:2]
+          current.append(Alphabet.index(word))
+        temp.append(current)
+      return temp
 
     # Number of Samples
     self.n_samples = xy['sentenceText'].shape[0]
 
     # Create the Neural and Sentence Data and Padding
-    self.neural_data, self.neural_padding, self.setence_padding = stack_padding(np.array(xy['tx1']), np.array(xy['spikePow']), np.array(xy['sentenceText']), self.n_samples)
+    self.sentenceText = text_conversion(xy['sentenceText'])
+    self.neural_data, self.sentenceText, self.neural_padding, self.sentence_padding = stack_padding(np.array(xy['tx1']), np.array(xy['spikePow']), self.sentenceText, self.n_samples)
+    # import pdb; pdb.set_trace()
     self.neural_data = torch.from_numpy(np.array(self.neural_data))
+    self.sentenceText = torch.from_numpy(self.sentenceText)
     self.neural_padding = torch.from_numpy(np.array(self.neural_padding))
-    self.setence_padding = torch.from_numpy(np.array(self.setence_padding))
+    self.sentence_padding = torch.from_numpy(np.array(self.sentence_padding))
+
 
   # Output neural data, sentences, and the padding as auxillary data
   def __getitem__(self, index):
-    return self.neural_data[index], self.setenceText[index], self.neural_padding[index], self.setence_padding[index]
+    return self.neural_data[index], self.sentenceText[index], self.neural_padding[index], self.sentence_padding[index]
 
   def __len__(self):
     return self.n_samples
