@@ -406,6 +406,11 @@ class BCIDataset(Dataset):
     # data loading
     xy = loadmat(path, squeeze_me=True)
 
+    # # TEMPORARILY MAKE DATASET SMALLER FOR DEBUGGING
+    # xy['tx1'] = xy['tx1'][:64]
+    # xy['spikePow'] = xy['spikePow'][:64]
+    # xy['sentenceText'] = xy['sentenceText'][:64]
+
     # This will manipulate the tx1 and Spikepow matrices to gather the relevent
     # Columns [:, :128] on each and concatenate them horizontally. Padding will
     # then be added. However, we will keep track of padding through a padding
@@ -415,7 +420,7 @@ class BCIDataset(Dataset):
       # find the longest sentence (matrix with most rows)
       max_row = max(tx1[:].T, key=len).__len__()
       max_char = max(sentenceText[:], key=len).__len__()
-      neural_padding = jnp.zeros((n_samples, max_row, 256))
+      neural_padding = jnp.zeros((n_samples, max_row))
       sentence_padding = jnp.zeros((n_samples, max_char))
       neural_data = np.zeros((n_samples, max_row, 256))
 
@@ -424,7 +429,7 @@ class BCIDataset(Dataset):
         sequence_length = np.shape(tx1[i])[0]
         sentence_length = max(sentenceText[i].find('.'), sentenceText[i].find('?'))
         sentence_padding = sentence_padding.at[i, (sentence_length + 1):].set(1.0)
-        neural_padding = neural_padding.at[i, sequence_length:, :].set(1.0)
+        neural_padding = neural_padding.at[i, sequence_length:].set(1.0)
 
         # Will stack spikePow horizontally with tx1 with tx1 at [:128]
         temp = np.hstack((tx1[i][:, :128], spikePow[i][:, :128]))
@@ -442,7 +447,6 @@ class BCIDataset(Dataset):
 
     # Create the Neural and Sentence Data and Padding
     self.neural_data, self.neural_padding, self.setence_padding = stack_padding(np.array(xy['tx1']), np.array(xy['spikePow']), np.array(xy['sentenceText']), self.n_samples)
-    # import pdb; pdb.set_trace()
     self.neural_data = torch.from_numpy(np.array(self.neural_data))
     self.neural_padding = torch.from_numpy(np.array(self.neural_padding))
     self.setence_padding = torch.from_numpy(np.array(self.setence_padding))

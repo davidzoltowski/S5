@@ -304,7 +304,9 @@ def prep_batch(batch: tuple,
         raise RuntimeError("BCI: We should not be getting into this situation.")
 
     # Convert and apply.
-    targets = np.array(targets.numpy())
+    targets = np.array(targets.numpy()).astype(float)
+    neural_pad = np.array(neural_pad.numpy()).astype(float)
+    sentence_pad = np.array(sentence_pad.numpy()).astype(float)
 
     # If there is an aux channel containing the integration times, then add that.
     # if 'timesteps' in aux_data.keys():
@@ -312,7 +314,7 @@ def prep_batch(batch: tuple,
     # else:
     integration_timesteps = np.ones((len(inputs), seq_len))
 
-    return inputs, targets.astype(float), integration_timesteps, neural_pad, sentence_pad
+    return inputs, targets, integration_timesteps, neural_pad, sentence_pad
 
 
 def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_params):
@@ -353,7 +355,7 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
     losses, accuracies, preds = np.array([]), np.array([]), np.array([])
     for batch_idx, batch in enumerate(tqdm(testloader)):
         # inputs, labels, integration_timesteps = prep_batch(batch, seq_len, in_dim)
-        inputs, labels, integration_times, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
+        inputs, labels, integration_timesteps, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
         loss, acc, pred = \
             eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad)
         losses = np.append(losses, loss)
@@ -363,7 +365,7 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
     return aveloss, aveaccu
 
 
-@partial(jax.jit, static_argnums=(5, 6))
+@partial(jax.jit, static_argnums=(7, 8))
 def train_step(state,
                rng,
                batch_inputs,
@@ -426,6 +428,9 @@ def eval_step(batch_inputs,
 
     # losses = cross_entropy_loss(logits, batch_labels)
     losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
-    accs = compute_accuracy(logits, batch_labels)
+    
+    # accs = compute_accuracy(logits, batch_labels)
+
+    accs = float(0.5)
 
     return losses, accs, logits
