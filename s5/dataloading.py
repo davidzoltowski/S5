@@ -4,6 +4,9 @@ import os
 from typing import Callable, Optional, TypeVar, Dict, Tuple, List, Union
 
 DEFAULT_CACHE_DIR_ROOT = Path('./cache_dir/')
+ALPHABET = ["-", "|", "", "AA", "AE", "AH","AO","AW", "AY", "EH", "ER","EY","IH", "IY","OW","OY", "UH",\
+            "UW", "B", "CH", "D", "DH", "F", "G", "HH", "JH", "K", "L", "M", "N", "NG",\
+            "P", "R", "S", "SH", "T", "TH", "V", "W", "Y", "Z", "ZH", " ", ".", ",", "?", "'"]
 
 DataLoader = TypeVar('DataLoader')
 InputType = [str, Optional[int], Optional[int]]
@@ -443,9 +446,6 @@ class BCIDataset(Dataset):
     def text_conversion(sentenceText):
       g2p = G2p()
       temp = []
-      Alphabet = ["", "AA", "AE", "AH","AO","AW", "AY", "EH", "ER","EY","IH", "IY","OW","OY", "UH",\
-                  "UW", "B", "CH", "D", "DH", "F", "G", "HH", "JH", "K", "L", "M", "N", "NG",\
-                  "P", "R", "S", "SH", "T", "TH", "V", "W", "Y", "Z", "ZH", " ", ".", ",", "?", "'"]
       for sentence in sentenceText:
         current = []
         sentence = g2p(sentence)
@@ -453,7 +453,7 @@ class BCIDataset(Dataset):
           # remove stress mark
           if word.find("0") != -1 or word.find("1") != -1 or word.find("2") != -1:
             word = word[:2]
-          current.append(Alphabet.index(word))
+          current.append(ALPHABET.index(word))
         temp.append(current)
       return temp
 
@@ -499,10 +499,10 @@ def BCIData_loader(cache_dir: str,
   neuralData_train, labels_train, neural_padding, sentence_padding = trainDataset[0]
   neuralData_test, labels_test, neural_padding, sentence_padding = testDataset[0]
 
-  N_CLASSES = len(trainDataset) + len(testDataset)
+  N_CLASSES = len(ALPHABET)
   SEQ_LENGTH = [neuralData_train.shape[0],neuralData_test.shape[0]]
   IN_DIM = 256
-  TRAIN_SIZE = len(trainDataset) 
+  TRAIN_SIZE = len(trainDataset)
 
   # ToDo, add an aux loader to deal with padding.
   aux_loader = {}
