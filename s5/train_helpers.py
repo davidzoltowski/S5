@@ -8,6 +8,11 @@ import optax
 from typing import Any, Tuple
 from optax import ctc_loss
 
+import numpy as onp
+import torch
+import torchaudio
+from torchaudio.models.decoder import ctc_decoder
+
 # LR schedulers
 def linear_warmup(step, base_lr, end_step, lr_min=None):
     return base_lr * (step + 1) / end_step
@@ -272,6 +277,27 @@ def cross_entropy_loss(logits, label):
 def compute_accuracy(logits, label):
     return np.argmax(logits) == label
 
+# tokens = Phonemes
+beam_search_decoder = ctc_decoder(
+    lexicon=None,
+    tokens=tokens,
+    lm=None,
+    nbest=1,
+    beam_size=50,
+)
+#     lm_weight=LM_WEIGHT,
+    # word_score=WORD_SCORE,
+
+def compute_ctc_accuracy(logits, label):
+    # convert to torch for CTC decode & accuracy
+    logits_torch = torch.from_numpy(onp.array(logits))
+    predict = beam_search_decoder(logits_torch)
+    # beam_search_transcript = " ".join(beam_search_result[0][0].words).strip()
+    beam_search_wer = torchaudio.functional.edit_distance(actual_transcript, predict) / len(
+    actual_transcript
+    )
+    return beam_search_wer
+
 
 def prep_batch(batch: tuple,
                seq_len: int,
@@ -426,11 +452,9 @@ def eval_step(batch_inputs,
                              batch_inputs, batch_integration_timesteps,
                              )
 
-    # losses = cross_entropy_loss(logits, batch_labels)
     losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
-    
-    # accs = compute_accuracy(logits, batch_labels)
-
-    accs = float(0.5)
+    losses = cross_entropy_loss(logits, batch_labels)
+    accs = np.mean([compute_ctc_accuracy(_logit, _label) for (_logit, _label) in 
+            zip(logits, batch_labels)])
 
     return losses, accs, logits
