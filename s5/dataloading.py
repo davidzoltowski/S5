@@ -407,10 +407,10 @@ class BCIDataset(Dataset):
     # data loading
     xy = loadmat(path, squeeze_me=True)
 
-    # TEMPORARILY MAKE DATASET SMALLER FOR DEBUGGING
-    xy['tx1'] = xy['tx1'][:64]
-    xy['spikePow'] = xy['spikePow'][:64]
-    xy['sentenceText'] = xy['sentenceText'][:64]
+    # # TEMPORARILY MAKE DATASET SMALLER FOR DEBUGGING
+    # xy['tx1'] = xy['tx1'][:64]
+    # xy['spikePow'] = xy['spikePow'][:64]
+    # xy['sentenceText'] = xy['sentenceText'][:64]
 
     # This will manipulate the tx1 and Spikepow matrices to gather the relevent
     # Columns [:, :128] on each and concatenate them horizontally. Padding will
@@ -499,12 +499,10 @@ def BCIData_loader(cache_dir: str,
   neuralData_train, labels_train, neural_padding, sentence_padding = trainDataset[0]
   neuralData_test, labels_test, neural_padding, sentence_padding = testDataset[0]
 
-  N_CLASSES = len(labels_train) + len(labels_test)
-
-  # Would be one or the other, determine at some point.
+  N_CLASSES = len(trainDataset) + len(testDataset)
   SEQ_LENGTH = [neuralData_train.shape[0],neuralData_test.shape[0]]
   IN_DIM = 256
-  TRAIN_SIZE = len(labels_train)
+  TRAIN_SIZE = len(trainDataset) 
 
   # ToDo, add an aux loader to deal with padding.
   aux_loader = {}
