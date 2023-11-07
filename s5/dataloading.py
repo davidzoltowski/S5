@@ -6,7 +6,7 @@ from typing import Callable, Optional, TypeVar, Dict, Tuple, List, Union
 DEFAULT_CACHE_DIR_ROOT = Path('./cache_dir/')
 ALPHABET = ["-", "|", "", "AA", "AE", "AH","AO","AW", "AY", "EH", "ER","EY","IH", "IY","OW","OY", "UH",\
             "UW", "B", "CH", "D", "DH", "F", "G", "HH", "JH", "K", "L", "M", "N", "NG",\
-            "P", "R", "S", "SH", "T", "TH", "V", "W", "Y", "Z", "ZH", " ", ".", ",", "?", "'"]
+            "P", "R", "S", "SH", "T", "TH", "V", "W", "Y", "Z", "ZH", " ", ".", ",", "?", "'", "!"]
 
 DataLoader = TypeVar('DataLoader')
 InputType = [str, Optional[int], Optional[int]]
@@ -402,18 +402,34 @@ from scipy.io import loadmat
 from array import array
 import jax.numpy as jnp
 from g2p_en import G2p
+import os
 
 # This turns the data into something that can be handled by the pytorch Data
 # loader.
 class BCIDataset(Dataset):
   def __init__(self, path):
-    # data loading
-    xy = loadmat(path, squeeze_me=True)
+    sentenceText, tx1, spikePow = np.array([]), np.array([]), np.array([])
 
-    # # TEMPORARILY MAKE DATASET SMALLER FOR DEBUGGING
-    # xy['tx1'] = xy['tx1'][:64]
-    # xy['spikePow'] = xy['spikePow'][:64]
-    # xy['sentenceText'] = xy['sentenceText'][:64]
+    # DATALOADING A FOLDER
+    # file_list = os.listdir(path)
+    # for filename in file_list:
+    #   filename = path + filename
+    #   xy = loadmat(filename, squeeze_me=True)
+    #   sentenceText = np.append(sentenceText, xy['sentenceText'])
+    #   tx1 = np.append(tx1, xy['tx1'])
+    #   spikePow = np.append(spikePow, xy['spikePow'])
+
+    # DATALOADING A FILE
+    xy = loadmat(path, squeeze_me=True)
+    sentenceText =xy['sentenceText']
+    tx1 = xy['tx1']
+    spikePow = xy['spikePow']
+
+    # DATALOADING A PORTION OF
+    # tx1 = tx1[:64]
+    # spikePow = spikePow[:64]
+    # sentenceText = sentenceText[:64]
+
 
     # This will manipulate the tx1 and Spikepow matrices to gather the relevent
     # Columns [:, :128] on each and concatenate them horizontally. Padding will
@@ -453,17 +469,18 @@ class BCIDataset(Dataset):
           # remove stress mark
           if word.find("0") != -1 or word.find("1") != -1 or word.find("2") != -1:
             word = word[:2]
+          if word.find("-") != -1:
+            word = "|"
           current.append(ALPHABET.index(word))
         temp.append(current)
       return temp
 
     # Number of Samples
-    self.n_samples = xy['sentenceText'].shape[0]
+    self.n_samples = sentenceText.shape[0]
 
     # Create the Neural and Sentence Data and Padding
-    self.sentenceText = text_conversion(xy['sentenceText'])
-    self.neural_data, self.sentenceText, self.neural_padding, self.sentence_padding = stack_padding(np.array(xy['tx1']), np.array(xy['spikePow']), self.sentenceText, self.n_samples)
-    # import pdb; pdb.set_trace()
+    self.sentenceText = text_conversion(sentenceText)
+    self.neural_data, self.sentenceText, self.neural_padding, self.sentence_padding = stack_padding(tx1, spikePow, self.sentenceText, self.n_samples)
     self.neural_data = torch.from_numpy(np.array(self.neural_data))
     self.sentenceText = torch.from_numpy(self.sentenceText)
     self.neural_padding = torch.from_numpy(np.array(self.neural_padding))
@@ -483,10 +500,13 @@ def BCIData_loader(cache_dir: str,
 				  seed: int = 42,
           shuffle: bool = True):
 
-  # This is because we are only going through one file. This will be changed
-  # when we want to iterate through the whole folder.
+  # DATALOADING A FILE.
   train_str = str(cache_dir) + "train/t12.2022.05.24.mat"
   test_str = str(cache_dir) + "test/t12.2022.05.24.mat"
+
+  # DATALOADING A FOLDER.
+  # train_str = str(cache_dir) + "train/"
+  # test_str = str(cache_dir) + "test/"
 
   trainDataset = BCIDataset(path=train_str)
   testDataset = BCIDataset(path=test_str)
