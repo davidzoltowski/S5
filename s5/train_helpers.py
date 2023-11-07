@@ -293,15 +293,16 @@ def compute_ctc_accuracy(logits, label, neural_padding, label_padding):
     # convert to torch for CTC decode & accuracy
     logits = onp.array(logits)
     neural_padding = onp.array(neural_padding)
+    label_padding = onp.array(label_padding)
+    label = onp.array(label)
     logits_torch = torch.from_numpy(onp.array(logits[None,neural_padding==0,:]))
     beam_search_result = beam_search_decoder(logits_torch)
     tokens = beam_search_result[0][0].tokens
     predict = [ALPHABET[token] for token in tokens if ALPHABET[token] != '|']
-    actual_label = label[label_padding[0]==0].numpy().astype(int)
+    actual_label = label[label_padding==0].astype(int)
     actual_phonemes = [ALPHABET[token] for token in actual_label if ALPHABET[token] != '|']
     beam_search_per = torchaudio.functional.edit_distance(actual_phonemes, predict) / len(actual_phonemes)
     return beam_search_per
-
 
 
 def prep_batch(batch: tuple,
@@ -387,9 +388,12 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
     for batch_idx, batch in enumerate(tqdm(testloader)):
         # inputs, labels, integration_timesteps = prep_batch(batch, seq_len, in_dim)
         inputs, labels, integration_timesteps, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
-        loss, acc, pred = \
+        loss, pred = \
             eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad)
         losses = np.append(losses, loss)
+        acc = np.mean(np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
+            for (_logit, _label, _neural_padding, _label_padding) in 
+            zip(pred, labels, neural_pad, sentence_pad)]))
         accuracies = np.append(accuracies, acc)
 
     aveloss, aveaccu = np.mean(losses), np.mean(accuracies)
@@ -458,8 +462,5 @@ def eval_step(batch_inputs,
                              )
 
     losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
-    accs = np.mean(np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
-            for (_logit, _label, _neural_padding, _label_padding) in 
-            zip(logits, batch_labels, batch_neural_pad, batch_sentence_pad)]))
 
-    return losses, accs, logits
+    return losses, logits
