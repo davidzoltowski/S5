@@ -222,7 +222,8 @@ def train(args):
         else:
             count += 1
 
-        if val_acc > best_acc:
+        # Changed to relate to edit distance
+        if val_acc < best_acc:
             # Increment counters etc.
             count = 0
             best_loss, best_acc, best_epoch = val_loss, val_acc, epoch

@@ -301,8 +301,10 @@ def compute_ctc_accuracy(logits, label, neural_padding, label_padding):
     predict = [ALPHABET[token] for token in tokens if ALPHABET[token] != '|']
     actual_label = label[label_padding==0].astype(int)
     actual_phonemes = [ALPHABET[token] for token in actual_label if ALPHABET[token] != '|']
-    beam_search_per = torchaudio.functional.edit_distance(actual_phonemes, predict) / len(actual_phonemes)
-    return beam_search_per
+    # outputs an array with edit distance and length
+    edit_distance = torchaudio.functional.edit_distance(actual_phonemes, predict)
+    length = len(actual_phonemes)
+    return [edit_distance, length]
 
 
 def prep_batch(batch: tuple,
@@ -391,12 +393,14 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
         loss, pred = \
             eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad)
         losses = np.append(losses, loss)
-        acc = np.mean(np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
+        acc = np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
             for (_logit, _label, _neural_padding, _label_padding) in 
-            zip(pred, labels, neural_pad, sentence_pad)]))
-        accuracies = np.append(accuracies, acc)
-
-    aveloss, aveaccu = np.mean(losses), np.mean(accuracies)
+            zip(pred, labels, neural_pad, sentence_pad)])
+        accuracies = np.append(accuracies, np.sum(acc, axis=0))
+        print('hi')
+    aveloss = np.mean(losses)
+    print(accuracies)
+    aveaccu = (np.sum(accuracies, axis=0)[0]) / (np.sum(accuracies, axis=0)[1])
     return aveloss, aveaccu
 
 

@@ -479,7 +479,7 @@ class BCIDataset(Dataset):
 
 # BCI Dataloader meant to call the DataLoader function.
 def BCIData_loader(cache_dir: str,
-				  bsz: int = 50,
+				  bsz: int = 64,
 				  seed: int = 42,
           shuffle: bool = True):
 
@@ -492,7 +492,7 @@ def BCIData_loader(cache_dir: str,
   testDataset = BCIDataset(path=test_str)
 
   trainloader = DataLoader(dataset=trainDataset, batch_size=bsz)
-  testloader = DataLoader(dataset=testDataset, batch_size=bsz, shuffle=False)
+  testloader = DataLoader(dataset=testDataset, batch_size=20, shuffle=False)
   valloader = None
 
   # Stack the tx1 and spikePow earlier
