@@ -291,6 +291,8 @@ beam_search_decoder = ctc_decoder(
 
 def compute_ctc_accuracy(logits, label, neural_padding, label_padding):
     # convert to torch for CTC decode & accuracy
+    logits = onp.array(logits)
+    neural_padding = onp.array(neural_padding)
     logits_torch = torch.from_numpy(onp.array(logits[None,neural_padding==0,:]))
     beam_search_result = beam_search_decoder(logits_torch)
     tokens = beam_search_result[0][0].tokens
