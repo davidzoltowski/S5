@@ -18,7 +18,7 @@ def train(args):
     """
 
     best_test_loss = 100000000
-    best_test_acc = -10000.0
+    best_test_acc = 10000.0
 
     if args.USE_WANDB:
         # Make wandb config dictionary
@@ -138,9 +138,9 @@ def train(args):
                                dt_global=args.dt_global)
 
     # Training Loop over epochs
-    best_loss, best_acc, best_epoch = 100000000, -100000000.0, 0  # This best loss is val_loss
+    best_loss, best_acc, best_epoch = 100000000, 100000000.0, 0  # This best loss is val_loss
     count, best_val_loss = 0, 100000000  # This line is for early stopping purposes
-    lr_count, opt_acc = 0, -100000000.0  # This line is for learning rate decay
+    lr_count, opt_acc = 0, 100000000.0  # This line is for learning rate decay
     step = 0  # for per step learning rate decay
     steps_per_epoch = int(train_size/args.bsz)
     for epoch in range(args.epochs):

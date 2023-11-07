@@ -386,7 +386,7 @@ def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_p
 def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=1.0):
     """Validation function that loops over batches"""
     model = model(training=False, step_rescale=step_rescale)
-    losses, accuracies, preds = np.array([]), np.array([]), np.array([])
+    losses, edit_distance, length, preds = np.array([]), np.array([]), np.array([]), np.array([])
     for batch_idx, batch in enumerate(tqdm(testloader)):
         # inputs, labels, integration_timesteps = prep_batch(batch, seq_len, in_dim)
         inputs, labels, integration_timesteps, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
@@ -396,11 +396,10 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
         acc = np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
             for (_logit, _label, _neural_padding, _label_padding) in 
             zip(pred, labels, neural_pad, sentence_pad)])
-        accuracies = np.append(accuracies, np.sum(acc, axis=0))
-        print('hi')
+        edit_distance = np.append(edit_distance, np.sum(acc, axis=0)[0])
+        length = np.append(length, np.sum(acc, axis=0)[1])
     aveloss = np.mean(losses)
-    print(accuracies)
-    aveaccu = (np.sum(accuracies, axis=0)[0]) / (np.sum(accuracies, axis=0)[1])
+    aveaccu = (np.sum(edit_distance)) / (np.sum(length))
     return aveloss, aveaccu
 
 
