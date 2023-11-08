@@ -411,19 +411,23 @@ class BCIDataset(Dataset):
     sentenceText, tx1, spikePow = np.array([]), np.array([]), np.array([])
 
     # DATALOADING A FOLDER
-    # file_list = os.listdir(path)
-    # for filename in file_list:
-    #   filename = path + filename
-    #   xy = loadmat(filename, squeeze_me=True)
-    #   sentenceText = np.append(sentenceText, xy['sentenceText'])
-    #   tx1 = np.append(tx1, xy['tx1'])
-    #   spikePow = np.append(spikePow, xy['spikePow'])
+    file_list = os.listdir(path)
+    # stops the all the data from loading
+    count = 0
+    for filename in file_list:
+      while count < 5:
+        full_name = path + filename
+        xy = loadmat(full_name, squeeze_me=True)
+        sentenceText = np.append(sentenceText, xy['sentenceText'])
+        tx1 = np.append(tx1, xy['tx1'])
+        spikePow = np.append(spikePow, xy['spikePow'])
+        count = count + 1
 
     # DATALOADING A FILE
-    xy = loadmat(path, squeeze_me=True)
-    sentenceText =xy['sentenceText']
-    tx1 = xy['tx1']
-    spikePow = xy['spikePow']
+    # xy = loadmat(path, squeeze_me=True)
+    # sentenceText =xy['sentenceText']
+    # tx1 = xy['tx1']
+    # spikePow = xy['spikePow']
 
     # DATALOADING A PORTION OF
     # tx1 = tx1[:64]
@@ -501,12 +505,12 @@ def BCIData_loader(cache_dir: str,
           shuffle: bool = True):
 
   # DATALOADING A FILE.
-  train_str = str(cache_dir) + "train/t12.2022.05.24.mat"
-  test_str = str(cache_dir) + "test/t12.2022.05.24.mat"
+  # train_str = str(cache_dir) + "train/t12.2022.05.24.mat"
+  # test_str = str(cache_dir) + "test/t12.2022.05.24.mat"
 
   # DATALOADING A FOLDER.
-  # train_str = str(cache_dir) + "train/"
-  # test_str = str(cache_dir) + "test/"
+  train_str = str(cache_dir) + "train/"
+  test_str = str(cache_dir) + "test/"
 
   trainDataset = BCIDataset(path=train_str)
   testDataset = BCIDataset(path=test_str)
