@@ -413,15 +413,15 @@ class BCIDataset(Dataset):
     # DATALOADING A FOLDER
     file_list = os.listdir(path)
     # stops the all the data from loading
-    count = 0
+    # count = 0
     for filename in file_list:
-      while count < 5:
+      # while count < 5:
         full_name = path + filename
         xy = loadmat(full_name, squeeze_me=True)
         sentenceText = np.append(sentenceText, xy['sentenceText'])
         tx1 = np.append(tx1, xy['tx1'])
         spikePow = np.append(spikePow, xy['spikePow'])
-        count = count + 1
+        # count = count + 1
 
     # DATALOADING A FILE
     # xy = loadmat(path, squeeze_me=True)
