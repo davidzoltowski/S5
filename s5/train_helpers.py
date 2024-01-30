@@ -351,6 +351,15 @@ def prep_batch(batch: tuple,
     return inputs, targets, integration_timesteps, neural_pad, sentence_pad
 
 
+def add_constant_offset(rng, inputs, std=0.2):
+    B, _, D = inputs.shape[0]
+    bias = std * jax.random.normal(rng, (B, D))
+    return inputs + bias[:, None, :]
+
+def add_gaussian_noise(rng, inputs, std=0.8):
+    return inputs + std * jax.random.normal(rng, inputs.shape)
+
+
 def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_params):
     """
     Training function for an epoch that loops over batches.
@@ -363,6 +372,10 @@ def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_p
 
     for batch_idx, batch in enumerate(tqdm(trainloader)):
         inputs, labels, integration_times, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
+        rng, gauss_rng = jax.random.split(rng)
+        inputs = add_gaussian_noise(gauss_rng, inputs, std=0.8)
+        rng, co_rng = jax.random.split(rng)
+        inputs = add_constant_offset(co_rng, inputs, std=0.2)
         rng, drop_rng = jax.random.split(rng)
         state, loss = train_step(
             state,
