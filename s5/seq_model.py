@@ -426,4 +426,3 @@ BatchSpeechBCIDecoderModel = nn.vmap(
     out_axes=0,
     variable_axes={"params": None, "dropout": None, 'batch_stats': None, "cache": 0, "prime": None},
     split_rngs={"params": False, "dropout": True}, axis_name='batch')
-

@@ -7,7 +7,6 @@ from flax.training import train_state
 import optax
 from typing import Any, Tuple
 from optax import ctc_loss
-
 import numpy as onp
 import torch
 import torchaudio
@@ -138,10 +137,11 @@ def create_train_state(model_cls,
                            dummy_input, integration_timesteps,
                            )
     if batchnorm:
-        params = variables["params"]
+        params = variables["params"].unfreeze()
         batch_stats = variables["batch_stats"]
     else:
-        params = variables["params"]
+        params = variables["params"].unfreeze()
+        # Note unfreeze() is for using Optax.
 
     if opt_config in ["standard"]:
         """This option applies weight decay to C, but B is kept with the
@@ -278,16 +278,14 @@ def cross_entropy_loss(logits, label):
 def compute_accuracy(logits, label):
     return np.argmax(logits) == label
 
-# tokens = Phonemes
 beam_search_decoder = ctc_decoder(
     lexicon=None,
     tokens=ALPHABET,
     lm=None,
     nbest=1,
     beam_size=50,
+    sil_token=' ',
 )
-#     lm_weight=LM_WEIGHT,
-    # word_score=WORD_SCORE,
 
 def compute_ctc_accuracy(logits, label, neural_padding, label_padding):
     # convert to torch for CTC decode & accuracy
@@ -298,11 +296,17 @@ def compute_ctc_accuracy(logits, label, neural_padding, label_padding):
     logits_torch = torch.from_numpy(onp.array(logits[None,neural_padding==0,:]))
     beam_search_result = beam_search_decoder(logits_torch)
     tokens = beam_search_result[0][0].tokens
-    predict = [ALPHABET[token] for token in tokens if ALPHABET[token] != '|']
+    predict = [ALPHABET[token] for token in tokens]
+#     print('predict')
+#     print(predict)
     actual_label = label[label_padding==0].astype(int)
-    actual_phonemes = [ALPHABET[token] for token in actual_label if ALPHABET[token] != '|']
+    actual_phonemes = [ALPHABET[token] for token in actual_label]
+#     print('actual_phonemes')
+#     print(actual_phonemes)
     # outputs an array with edit distance and length
     edit_distance = torchaudio.functional.edit_distance(actual_phonemes, predict)
+#     print('edit_distance')
+#     print(edit_distance)
     length = len(actual_phonemes)
     return [edit_distance, length]
 
@@ -388,7 +392,6 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
     model = model(training=False, step_rescale=step_rescale)
     losses, edit_distance, length, preds = np.array([]), np.array([]), np.array([]), np.array([])
     for batch_idx, batch in enumerate(tqdm(testloader)):
-        # inputs, labels, integration_timesteps = prep_batch(batch, seq_len, in_dim)
         inputs, labels, integration_timesteps, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
         loss, pred = \
             eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad)
@@ -399,7 +402,7 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
         edit_distance = np.append(edit_distance, np.sum(acc, axis=0)[0])
         length = np.append(length, np.sum(acc, axis=0)[1])
     aveloss = np.mean(losses)
-    aveaccu = (np.sum(edit_distance)) / (np.sum(length))
+    aveaccu = 1 - ((np.sum(edit_distance)) / (np.sum(length)))
     return aveloss, aveaccu
 
 
@@ -416,7 +419,6 @@ def train_step(state,
                ):
     """Performs a single training step given a batch of data"""
     def loss_fn(params):
-
         if batchnorm:
             logits, mod_vars = model.apply(
                 {"params": params, "batch_stats": state.batch_stats},
