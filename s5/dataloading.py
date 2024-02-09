@@ -28,12 +28,12 @@ from array import array
 
 class BCIDataset(Dataset):
   def __init__(self, path):
-    neural_data, sentence_text, neural_padding, sentence_padding = [], [], [], []
+    neural_data, sentence_text, neural_padding, sentence_padding, day = [], [], [], [], []
 
     # DATALOADING A FOLDER
     file_list = os.listdir(path)
     
-    for filename in file_list:
+    for day_idx, filename in enumerate(file_list):
       print(filename)
       full_name = path + filename
       xy = loadmat(full_name, squeeze_me=True)
@@ -41,11 +41,13 @@ class BCIDataset(Dataset):
       sentence_text.append(np.array(xy['sentenceText']))
       neural_padding.append(np.array(xy['neuralPadding']))
       sentence_padding.append(np.array(xy['sentencePadding']))
+      day.append(day_idx * np.ones((xy['tx1'].shape[0],)))
 
     neural_data = np.vstack(neural_data)
     sentence_text = np.vstack(sentence_text)
     neural_padding = np.vstack(neural_padding)
     sentence_padding = np.vstack(sentence_padding)
+    day = np.vstack(day)
 
     # Number of Samples
     self.n_samples = sentence_text.shape[0]
@@ -55,10 +57,11 @@ class BCIDataset(Dataset):
     self.sentence_text = torch.from_numpy(sentence_text)
     self.neural_padding = torch.from_numpy(neural_padding)
     self.sentence_padding = torch.from_numpy(sentence_padding)
+    self.day = torch.from_numpy(day.astype(int))
 
   # Output neural data, sentences, and the padding as auxillary data
   def __getitem__(self, index):
-    return self.neural_data[index], self.sentence_text[index], self.neural_padding[index], self.sentence_padding[index]
+    return self.neural_data[index], self.sentence_text[index], self.neural_padding[index], self.sentence_padding[index], self.day[index]
 
   def __len__(self):
     return self.n_samples
@@ -76,13 +79,13 @@ def BCIData_loader(cache_dir: str,
   trainDataset = BCIDataset(path=train_str)
   testDataset = BCIDataset(path=test_str)
 
-  trainloader = DataLoader(dataset=trainDataset, batch_size=bsz)
+  trainloader = DataLoader(dataset=trainDataset, batch_size=bsz, shuffle=True)
   testloader = DataLoader(dataset=testDataset, batch_size=20, shuffle=False)
   valloader = None
 
   # Stack the tx1 and spikePow earlier
-  neuralData_train, labels_train, neural_padding, sentence_padding = trainDataset[0]
-  neuralData_test, labels_test, neural_padding, sentence_padding = testDataset[0]
+  neuralData_train, labels_train, _, _, _ = trainDataset[0]
+  neuralData_test, labels_test, _, _, _ = testDataset[0]
 
   N_CLASSES = len(ALPHABET)
   SEQ_LENGTH = [neuralData_train.shape[0],neuralData_test.shape[0]]

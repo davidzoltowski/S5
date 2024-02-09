@@ -2,6 +2,7 @@ import jax
 import jax.numpy as np
 from flax import linen as nn
 from .layers import SequenceLayer
+from jax.nn.initializers import lecun_normal, normal, constant
 
 
 class StackedEncoderModel(nn.Module):
@@ -360,6 +361,7 @@ class SpeechBCIDecoderModel(nn.Module):
     batchnorm: bool = False
     bn_momentum: float = 0.9
     step_rescale: float = 1.0
+    num_days: int = 1
 
     def setup(self):
         """
@@ -379,7 +381,13 @@ class SpeechBCIDecoderModel(nn.Module):
                                         )
         self.decoder = nn.Dense(self.d_output)
 
-    def __call__(self, x, integration_timesteps):
+        self.day_weights = self.param(
+            "day_weights", normal(stddev=1.0), (self.num_days, self.d_model, self.d_model))
+        self.day_biases = self.param(
+            "day_biases", constant(0.0), (self.num_days, self.d_model))
+
+
+    def __call__(self, x, integration_timesteps, day_idx):
         """
         Compute the size d_output log softmax output given a
         Lxd_input input sequence.
@@ -413,8 +421,10 @@ class SpeechBCIDecoderModel(nn.Module):
         # return nn.log_softmax(x, axis=-1)        
 
         # Updated Code
-        if self.padded:
-            x, length = x  # input consists of data and prepadded seq lens
+        # if self.padded:
+            # x, length = x  # input consists of data and prepadded seq 
+        # import pdb; pdb.set_trace()
+        x = jax.vmap(lambda u: self.day_weights[day_idx] @ u)(x) + self.day_biases[day_idx]
         x = self.encoder(x, integration_timesteps)
         x = self.decoder(x)
         return nn.log_softmax(x, axis=-1)
@@ -422,7 +432,7 @@ class SpeechBCIDecoderModel(nn.Module):
 # Here we call vmap to parallelize across a batch of input sequences
 BatchSpeechBCIDecoderModel = nn.vmap(
     SpeechBCIDecoderModel,
-    in_axes=(0, 0),
+    in_axes=(0, 0, 0),
     out_axes=0,
     variable_axes={"params": None, "dropout": None, 'batch_stats': None, "cache": 0, "prime": None},
     split_rngs={"params": False, "dropout": True}, axis_name='batch')
