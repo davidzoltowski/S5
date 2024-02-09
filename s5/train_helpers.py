@@ -420,6 +420,8 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
         loss, pred = \
             eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad, day_idxs)
         losses = np.append(losses, loss)
+        # downsample pad
+        neural_pad = neural_pad[:, ::4]
         acc = np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
             for (_logit, _label, _neural_padding, _label_padding) in 
             zip(pred, labels, neural_pad, sentence_pad)])
@@ -465,7 +467,7 @@ def train_step(state,
 
         # downsample
         logits = logits[:, ::4, :]
-        batch_neural_pad = batch_neural_pad[:, ::4, :]
+        batch_neural_pad = batch_neural_pad[:, ::4]
 
         loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
 
@@ -502,7 +504,7 @@ def eval_step(batch_inputs,
 
     # downsample
     logits = logits[:, ::4, :]
-    batch_neural_pad = batch_neural_pad[:, ::4, :]
+    batch_neural_pad = batch_neural_pad[:, ::4]
 
     losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
 
