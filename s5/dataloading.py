@@ -41,7 +41,7 @@ class BCIDataset(Dataset):
       sentence_text.append(np.array(xy['sentenceText']))
       neural_padding.append(np.array(xy['neuralPadding']))
       sentence_padding.append(np.array(xy['sentencePadding']))
-      day.append(day_idx * np.ones((xy['tx1'].shape[0],)))
+      day.append(day_idx * np.ones((xy['neuralData'].shape[0],)))
 
     neural_data = np.vstack(neural_data)
     sentence_text = np.vstack(sentence_text)
