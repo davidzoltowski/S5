@@ -12,6 +12,7 @@ import torch
 import torchaudio
 from torchaudio.models.decoder import ctc_decoder
 from .dataloading import ALPHABET
+import jax.scipy as jsp
 
 # LR schedulers
 def linear_warmup(step, base_lr, end_step, lr_min=None):
@@ -365,14 +366,13 @@ def add_constant_offset(rng, inputs, std=0.2):
 def add_gaussian_noise(rng, inputs, std=0.8):
     return inputs + std * jax.random.normal(rng, inputs.shape)
 
-# def gaussian_smooth():
-#     mean = (size - 1) / 2
-#     kernel = 1.0 / (sigma * jnp.sqrt(2.0 * jnp.pi)) * jnp.exp(- ((jnp.arange(size)-mean)**2)/2)
-#     kernel = kernel / jnp.sum(kernel)
-#     batch_conv = jax.vmap(lambda x : jsp.signal.convolve(x, kernel, mode='same'))
-#     d_batch_conv = jax.vmap(lambda x : batch_conv(x.T).T)
-#     out2 = d_batch_conv(xin)
-#     return
+def gaussian_smooth(inputs, sigma=2.0, size=20):
+    mean = (size - 1) / 2
+    kernel = 1.0 / (sigma * np.sqrt(2.0 * np.pi)) * np.exp(- ((np.arange(size)-mean)**2)/2)
+    kernel = kernel / np.sum(kernel)
+    trial_conv = jax.vmap(lambda x : jsp.signal.convolve(x, kernel, mode='same'))
+    batch_conv = jax.vmap(lambda x : trial_conv(x.T).T)
+    return batch_conv(inputs)
 
 def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_params):
     """
@@ -464,7 +464,8 @@ def train_step(state,
             )
 
         # downsample
-        # logits = logits[:, ::4, :]
+        logits = logits[:, ::4, :]
+        batch_neural_pad = batch_neural_pad[:, ::4, :]
 
         loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
 
@@ -498,6 +499,10 @@ def eval_step(batch_inputs,
         logits = model.apply({"params": state.params},
                              batch_inputs, batch_integration_timesteps, batch_day_idxs,
                              )
+
+    # downsample
+    logits = logits[:, ::4, :]
+    batch_neural_pad = batch_neural_pad[:, ::4, :]
 
     losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
 

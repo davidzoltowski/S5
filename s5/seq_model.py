@@ -396,34 +396,9 @@ class SpeechBCIDecoderModel(nn.Module):
         Returns:
             output (float32): (d_output)
         """
-        # Original Code
-        # if self.padded:
-        #     x, length = x  # input consists of data and prepadded seq lens
-
-        # x = self.encoder(x, integration_timesteps)
-        # if self.mode in ["pool"]:
-        #     # Perform mean pooling across time
-        #     if self.padded:
-        #         x = masked_meanpool(x, length)
-        #     else:
-        #         x = np.mean(x, axis=0)
-
-        # elif self.mode in ["last"]:
-        #     # Just take the last state
-        #     if self.padded:
-        #         raise NotImplementedError("Mode must be in ['pool'] for self.padded=True (for now...)")
-        #     else:
-        #         x = x[-1]
-        # else:
-        #     raise NotImplementedError("Mode must be in ['pool', 'last]")
-
-        # x = self.decoder(x)
-        # return nn.log_softmax(x, axis=-1)        
-
         # Updated Code
         # if self.padded:
             # x, length = x  # input consists of data and prepadded seq 
-        # import pdb; pdb.set_trace()
         x = jax.vmap(lambda u: self.day_weights[day_idx] @ u)(x) + self.day_biases[day_idx]
         x = self.encoder(x, integration_timesteps)
         x = self.decoder(x)
