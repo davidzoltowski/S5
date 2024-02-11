@@ -356,7 +356,7 @@ def prep_batch(batch: tuple,
 
 
 def add_constant_offset(rng, inputs, std=0.2):
-    B, _, D = inputs.shape[0]
+    B, _, D = inputs.shape
     bias = std * jax.random.normal(rng, (B, D))
     return inputs + bias[:, None, :]
 
