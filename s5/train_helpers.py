@@ -12,6 +12,7 @@ import torch
 import torchaudio
 from torchaudio.models.decoder import ctc_decoder
 from .dataloading import ALPHABET
+import jax.scipy as jsp
 
 # LR schedulers
 def linear_warmup(step, base_lr, end_step, lr_min=None):
@@ -129,12 +130,13 @@ def create_train_state(model_cls,
     else:
         dummy_input = np.ones((bsz, seq_len, in_dim))
         integration_timesteps = np.ones((bsz, seq_len, ))
+        day_idxs = np.zeros((bsz,)).astype(int)
 
     model = model_cls(training=True)
     init_rng, dropout_rng = jax.random.split(rng, num=2)
     variables = model.init({"params": init_rng,
                             "dropout": dropout_rng},
-                           dummy_input, integration_timesteps,
+                           dummy_input, integration_timesteps, day_idxs,
                            )
     if batchnorm:
         params = variables["params"].unfreeze()
@@ -322,7 +324,7 @@ def prep_batch(batch: tuple,
     :return:
     """
 
-    inputs, targets, neural_pad, sentence_pad = batch
+    inputs, targets, neural_pad, sentence_pad, day_idxs = batch
 
     # Convert to JAX.
     inputs = np.asarray(inputs.numpy())
@@ -345,14 +347,15 @@ def prep_batch(batch: tuple,
     targets = np.array(targets.numpy()).astype(float)
     neural_pad = np.array(neural_pad.numpy()).astype(float)
     sentence_pad = np.array(sentence_pad.numpy()).astype(float)
-
+    day_idxs = np.array(day_idxs.numpy()).astype(int)
+    
     # If there is an aux channel containing the integration times, then add that.
     # if 'timesteps' in aux_data.keys():
     #     integration_timesteps = np.diff(np.asarray(aux_data['timesteps'].numpy()))
     # else:
     integration_timesteps = np.ones((len(inputs), seq_len))
 
-    return inputs, targets, integration_timesteps, neural_pad, sentence_pad
+    return inputs, targets, integration_timesteps, neural_pad, sentence_pad, day_idxs
 
 
 def add_constant_offset(rng, inputs, std=0.2):
@@ -363,6 +366,13 @@ def add_constant_offset(rng, inputs, std=0.2):
 def add_gaussian_noise(rng, inputs, std=0.8):
     return inputs + std * jax.random.normal(rng, inputs.shape)
 
+def gaussian_smooth(inputs, sigma=2.0, size=20):
+    mean = (size - 1) / 2
+    kernel = 1.0 / (sigma * np.sqrt(2.0 * np.pi)) * np.exp(- ((np.arange(size)-mean)**2)/2)
+    kernel = kernel / np.sum(kernel)
+    trial_conv = jax.vmap(lambda x : jsp.signal.convolve(x, kernel, mode='same'))
+    batch_conv = jax.vmap(lambda x : trial_conv(x.T).T)
+    return batch_conv(inputs)
 
 def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_params):
     """
@@ -375,7 +385,7 @@ def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_p
     decay_function, ssm_lr, lr, step, end_step, opt_config, lr_min = lr_params
 
     for batch_idx, batch in enumerate(tqdm(trainloader)):
-        inputs, labels, integration_times, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
+        inputs, labels, integration_times, neural_pad, sentence_pad, day_idxs = prep_batch(batch, seq_len, in_dim)
         rng, gauss_rng = jax.random.split(rng)
         inputs = add_gaussian_noise(gauss_rng, inputs, std=0.8)
         rng, co_rng = jax.random.split(rng)
@@ -389,6 +399,7 @@ def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_p
             integration_times,
             neural_pad,
             sentence_pad,
+            day_idxs,
             model,
             batchnorm,
         )
@@ -405,10 +416,12 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
     model = model(training=False, step_rescale=step_rescale)
     losses, edit_distance, length, preds = np.array([]), np.array([]), np.array([]), np.array([])
     for batch_idx, batch in enumerate(tqdm(testloader)):
-        inputs, labels, integration_timesteps, neural_pad, sentence_pad = prep_batch(batch, seq_len, in_dim)
+        inputs, labels, integration_timesteps, neural_pad, sentence_pad, day_idxs = prep_batch(batch, seq_len, in_dim)
         loss, pred = \
-            eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad)
+            eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad, day_idxs)
         losses = np.append(losses, loss)
+        # downsample pad
+        neural_pad = neural_pad[:, ::4]
         acc = np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
             for (_logit, _label, _neural_padding, _label_padding) in 
             zip(pred, labels, neural_pad, sentence_pad)])
@@ -419,7 +432,7 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
     return aveloss, aveaccu
 
 
-@partial(jax.jit, static_argnums=(7, 8))
+@partial(jax.jit, static_argnums=(8, 9))
 def train_step(state,
                rng,
                batch_inputs,
@@ -427,25 +440,34 @@ def train_step(state,
                batch_integration_timesteps,
                batch_neural_pad,
                batch_sentence_pad,
+               batch_day_idxs,
                model,
                batchnorm,
                ):
+
+    # downsample
+    # batch_neural_pad = batch_neural_pad[:, ::4]
+
     """Performs a single training step given a batch of data"""
     def loss_fn(params):
         if batchnorm:
             logits, mod_vars = model.apply(
                 {"params": params, "batch_stats": state.batch_stats},
-                batch_inputs, batch_integration_timesteps,
+                batch_inputs, batch_integration_timesteps, batch_day_idxs,
                 rngs={"dropout": rng},
                 mutable=["intermediates", "batch_stats"],
             )
         else:
             logits, mod_vars = model.apply(
                 {"params": params},
-                batch_inputs, batch_integration_timesteps,
+                batch_inputs, batch_integration_timesteps, batch_day_idxs,
                 rngs={"dropout": rng},
                 mutable=["intermediates"],
             )
+
+        # downsample
+        logits = logits[:, ::4, :]
+        batch_neural_pad = batch_neural_pad[:, ::4]
 
         loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
 
@@ -468,16 +490,21 @@ def eval_step(batch_inputs,
               model,
               batchnorm,
               batch_neural_pad,
-              batch_sentence_pad
+              batch_sentence_pad,
+              batch_day_idxs
               ):
     if batchnorm:
         logits = model.apply({"params": state.params, "batch_stats": state.batch_stats},
-                             batch_inputs, batch_integration_timesteps,
+                             batch_inputs, batch_integration_timesteps, batch_day_idxs,
                              )
     else:
         logits = model.apply({"params": state.params},
-                             batch_inputs, batch_integration_timesteps,
+                             batch_inputs, batch_integration_timesteps, batch_day_idxs,
                              )
+
+    # downsample
+    logits = logits[:, ::4, :]
+    batch_neural_pad = batch_neural_pad[:, ::4]
 
     losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
 
