@@ -374,7 +374,7 @@ def gaussian_smooth(inputs, sigma=2.0, size=20):
     batch_conv = jax.vmap(lambda x : trial_conv(x.T).T)
     return batch_conv(inputs)
 
-def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_params):
+def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, opt_params):
     """
     Training function for an epoch that loops over batches.
     """
@@ -382,14 +382,16 @@ def train_epoch(state, rng, model, trainloader, seq_len, in_dim, batchnorm, lr_p
     model = model(training=True)
     batch_losses = []
 
-    decay_function, ssm_lr, lr, step, end_step, opt_config, lr_min = lr_params
+    decay_function, ssm_lr, lr, step, end_step, opt_config, lr_min, gauss_std, bias_std, smoothing, smooth_sigma, smooth_width = opt_params
 
     for batch_idx, batch in enumerate(tqdm(trainloader)):
         inputs, labels, integration_times, neural_pad, sentence_pad, day_idxs = prep_batch(batch, seq_len, in_dim)
         rng, gauss_rng = jax.random.split(rng)
-        inputs = add_gaussian_noise(gauss_rng, inputs, std=0.8)
+        inputs = add_gaussian_noise(gauss_rng, inputs, std=gauss_std)
         rng, co_rng = jax.random.split(rng)
-        inputs = add_constant_offset(co_rng, inputs, std=0.2)
+        inputs = add_constant_offset(co_rng, inputs, std=bias_std)
+        if smoothing:
+            gaussian_smooth(inputs, sigma=smooth_sigma, size=smooth_width)
         rng, drop_rng = jax.random.split(rng)
         state, loss = train_step(
             state,
