@@ -37,6 +37,13 @@ def train(args):
     # Set global learning rate lr (e.g. encoders, etc.) as function of ssm_lr
     lr = args.lr_factor * ssm_lr
 
+    # Set data augmentation parameters
+    gauss_std = args.gauss_std
+    bias_std = args.bias_std
+    smoothing = args.smoothing
+    smooth_sigma = args.smooth_sigma
+    smooth_width = args.smooth_width
+
     # Set randomness...
     print("[*] Setting Randomness...")
     key = random.PRNGKey(args.jax_seed)
@@ -148,7 +155,8 @@ def train(args):
             end_step = None
 
         #  Passing this around to manually handle per step learning rate decay.
-        lr_params = (decay_function, ssm_lr, lr, step, end_step, args.opt_config, args.lr_min)
+        # lr_params = (decay_function, ssm_lr, lr, step, end_step, args.opt_config, args.lr_min)
+        opt_params = (decay_function, ssm_lr, lr, step, end_step, opt_config, lr_min, gauss_std, bias_std, smoothing, smooth_sigma, smooth_width) 
 
         train_rng, skey = random.split(train_rng)
         state, train_loss, step = train_epoch(state,
@@ -158,7 +166,7 @@ def train(args):
                                               seq_len[0],
                                               in_dim,
                                               args.batchnorm,
-                                              lr_params)
+                                              opt_params)
 
         # Use test set as validation set
         print(f"[*] Running Epoch {epoch + 1} Test...")
