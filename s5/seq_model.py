@@ -362,6 +362,8 @@ class SpeechBCIDecoderModel(nn.Module):
     bn_momentum: float = 0.9
     step_rescale: float = 1.0
     num_days: int = 1
+    d_input: int = 256
+
 
     def setup(self):
         """
@@ -382,9 +384,9 @@ class SpeechBCIDecoderModel(nn.Module):
         self.decoder = nn.Dense(self.d_output)
 
         self.day_weights = self.param(
-            "day_weights", normal(stddev=1.0), (self.num_days, self.d_model, self.d_model))
+            "day_weights", normal(stddev=1.0), (self.num_days, self.d_input, self.d_input))
         self.day_biases = self.param(
-            "day_biases", constant(0.0), (self.num_days, self.d_model))
+            "day_biases", constant(0.0), (self.num_days, self.d_input))
 
 
     def __call__(self, x, integration_timesteps, day_idx):

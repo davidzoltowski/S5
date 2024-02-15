@@ -22,7 +22,7 @@ if __name__ == "__main__":
 	# Model Parameters
 	parser.add_argument("--n_layers", type=int, default=6,
 						help="Number of layers in the network")
-	parser.add_argument("--d_model", type=int, default=128,
+	parser.add_argument("--d_model", type=int, default=256,
 						help="Number of features, i.e. H, "
 							 "dimension of layer inputs/outputs")
 	parser.add_argument("--ssm_size_base", type=int, default=256,

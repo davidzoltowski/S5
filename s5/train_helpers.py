@@ -449,7 +449,7 @@ def train_step(state,
     # batch_neural_pad = batch_neural_pad[:, ::4]
 
     """Performs a single training step given a batch of data"""
-    def loss_fn(params):
+    def loss_fn(params, batch_neural_pad):
         if batchnorm:
             logits, mod_vars = model.apply(
                 {"params": params, "batch_stats": state.batch_stats},
@@ -467,13 +467,13 @@ def train_step(state,
 
         # downsample
         logits = logits[:, ::4, :]
-        batch_neural_pad = batch_neural_pad[:, ::4]
+        downSample_neural_pad = batch_neural_pad[:, ::4]
 
-        loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
+        loss = np.mean(ctc_loss(logits, downSample_neural_pad, batch_labels, batch_sentence_pad))
 
         return loss, (mod_vars, logits)
 
-    (loss, (mod_vars, logits)), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params)
+    (loss, (mod_vars, logits)), grads = jax.value_and_grad(loss_fn, has_aux=True)(state.params, batch_neural_pad)
 
     if batchnorm:
         state = state.apply_gradients(grads=grads, batch_stats=mod_vars["batch_stats"])
