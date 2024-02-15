@@ -471,7 +471,7 @@ def train_step(state,
         logits = logits[:, ::4, :]
         batch_neural_pad = batch_neural_pad[:, ::4]
 
-        loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
+        loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad) / np.sum(1.0 - batch_sentence_pad, axis=1))
 
         return loss, (mod_vars, logits)
 
@@ -508,6 +508,6 @@ def eval_step(batch_inputs,
     logits = logits[:, ::4, :]
     batch_neural_pad = batch_neural_pad[:, ::4]
 
-    losses = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad))
+    loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad) / np.sum(1.0 - batch_sentence_pad, axis=1))
 
     return losses, logits
