@@ -97,5 +97,15 @@ if __name__ == "__main__":
 	  	       "noBCdecay:      no weight decay on B (ssm lr), no weight decay on C (ssm lr) \\")
 	parser.add_argument("--jax_seed", type=int, default=1919,
 						help="seed randomness")
+	parser.add_argument("--gauss_std", type=float, default=0.0,
+						help="gaussian noise standard deviation")
+	parser.add_argument("--bias_std", type=float, default=0.0,
+						help="constant offset standard deviation")
+	parser.add_argument("--smoothing", type=bool, default=False,
+						help="gaussian smoothing")
+	parser.add_argument("--smooth_sigma", type=float, default=2.0,
+						help="gaussian smoothing sigma")
+	parser.add_argument("--smooth_width", type=int, default=20,
+						help="gaussian smoothing width")
 
 	train(parser.parse_args())
