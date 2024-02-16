@@ -147,47 +147,20 @@ class DownSamplingLayer(nn.Module):
         Returns:
             output sequence (float32): (L, d_model)
         """
-#         skip = x
-#         if self.prenorm:
-#             x = self.norm(x)
-#         x = self.seq(x)
 
-#         if self.activation in ["full_glu"]:
-#             x = self.drop(nn.gelu(x))
-#             x = self.out1(x) * jax.nn.sigmoid(self.out2(x))
-#             x = self.drop(x)
-#         elif self.activation in ["half_glu1"]:
-#             x = self.drop(nn.gelu(x))
-#             x = x * jax.nn.sigmoid(self.out2(x))
-#             x = self.drop(x)
-#         elif self.activation in ["half_glu2"]:
-#             # Only apply GELU to the gate input
-#             x1 = self.drop(nn.gelu(x))
-#             x = x * jax.nn.sigmoid(self.out2(x1))
-#             x = self.drop(x)
-#         elif self.activation in ["gelu"]:
-#             x = self.drop(nn.gelu(x))
-#         else:
-#             raise NotImplementedError(
-#                    "Activation: {} not implemented".format(self.activation))
-
-#         x = skip + x
-#         if not self.prenorm:
-#             x = self.norm(x)
         def averageSequence(neuralData, neuralPadding):
-            indexOfPadding = neuralPadding[0].index(1)
-            ds_neuralData, ds_neuralPadding = [], []
-            ds_neuralPadding = neuralPadding[:, ::2, :]
-            i = 0
-            while < indexOfPadding + 1:
-                ds_neuralData.append(np.array(((neuralData[i] + neuralData[i + 1]) / 2.0))
-                
-            ds_neuralData = torch.from_numpy(ds_neuralData)
-            return ds_neuralData, ds_neuralPadding
-        
-        
-        
-        
-        
+            mask = 1.0 - neuralPadding
+            if neuralData[0] % 2 == 0：
+                maskEven = mask[::2]
+                maskOdd = mask[1::2]
+                neuralData_even = neuralData[::2]
+                neuralData_odd = neuralData[1::2]
+                num = neuralData_even * maskEven + maskOdd * neuralData_odd
+                den = maskEven + maskOdd
+                ds_neuralData = np.where(den > 0, num / den, 0)
+                ds_neuralPadding = np.where(den > 0, 0, 1)
+                return ds_neuralData, ds_neuralPadding
+            
+        x = averageSequence (x, neural_pad)
         
         return x
