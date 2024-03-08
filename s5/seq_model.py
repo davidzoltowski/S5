@@ -1,9 +1,10 @@
 import jax
 import jax.numpy as np
+from jax import jit
 from flax import linen as nn
 from .layers import SequenceLayer
 from jax.nn.initializers import lecun_normal, normal, constant
-
+from functools import partial 
 
 class StackedEncoderModel(nn.Module):
     """ Defines a stack of S5 layers to be used as an encoder.
@@ -400,6 +401,7 @@ class SpeechBCIDecoderModel(nn.Module):
         # if self.padded:
             # x, length = x  # input consists of data and prepadded seq 
         x = jax.vmap(lambda u: self.day_weights[day_idx] @ u)(x) + self.day_biases[day_idx]
+        x = jax.nn.softsign(x)
         x = self.encoder(x, integration_timesteps)
         x = self.decoder(x)
         return nn.log_softmax(x, axis=-1)
@@ -408,6 +410,72 @@ class SpeechBCIDecoderModel(nn.Module):
 BatchSpeechBCIDecoderModel = nn.vmap(
     SpeechBCIDecoderModel,
     in_axes=(0, 0, 0),
+    out_axes=0,
+    variable_axes={"params": None, "dropout": None, 'batch_stats': None, "cache": 0, "prime": None},
+    split_rngs={"params": False, "dropout": True}, axis_name='batch')
+
+
+@partial(jit, static_argnums=(1,2))
+def stride_inputs(x, kernel_len, stride_len):
+    """
+    x is (TxD)
+    """
+    x_pad = np.vstack((np.zeros((kernel_len-1, x.shape[1])), x))
+    n_stride = x.shape[0] // stride_len
+    x_stride = np.array([x_pad[(i*stride_len):(i*stride_len+kernel_len)].ravel() for i in range(n_stride)])
+    return x_stride
+
+
+class RNNSpeechDecoderModel(nn.Module):
+    d_output: int
+    d_input: int 
+    d_neural: int 
+    d_hidden: int
+    d_model: int
+    n_layers: int
+    padded: bool
+    stride_len: int 
+    kernel_len: int 
+    dropout: float = 0.2
+    training: bool = True
+    num_days: int = 1
+    bidirectional: bool = True
+
+    def setup(self):
+        if self.bidirectional:
+            self.layers = [nn.Bidirectional(
+                    nn.RNN(nn.GRUCell(self.d_hidden)), 
+                    nn.RNN(nn.GRUCell(self.d_hidden)))
+                for _ in range(self.n_layers)]
+        else:
+            self.layers = [nn.RNN(nn.GRUCell(self.d_hidden))
+                for _ in range(self.n_layers)]
+
+        self.decoder = nn.Dense(self.d_output)
+        self.drop = nn.Dropout(rate=self.dropout, deterministic=not self.training)
+
+        self.day_weights = self.param(
+            "day_weights", normal(stddev=1.0), (self.num_days, self.d_model, self.d_model))
+        self.day_biases = self.param(
+            "day_biases", constant(0.0), (self.num_days, self.d_model))
+
+    def __call__(self, x, day_idx):
+        x = jax.vmap(lambda u: self.day_weights[day_idx] @ u)(x) + self.day_biases[day_idx]
+        x = jax.nn.soft_sign(x)
+        # stride inputs
+        x = stride_inputs(x, self.kernel_len, self.stride_len)
+        for layer in self.layers:
+            x = layer(x)
+            # nn.Dropout(rate=self.dropout, deterministic=not training)(x)
+            x = self.drop(x)
+        x = self.decoder(x)
+        return nn.log_softmax(x, axis=-1)
+
+
+# Here we call vmap to parallelize across a batch of input sequences
+BatchRNNSpeechDecoderModel = nn.vmap(
+    RNNSpeechDecoderModel,
+    in_axes=(0, 0),
     out_axes=0,
     variable_axes={"params": None, "dropout": None, 'batch_stats': None, "cache": 0, "prime": None},
     split_rngs={"params": False, "dropout": True}, axis_name='batch')
