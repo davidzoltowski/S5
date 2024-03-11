@@ -4,7 +4,80 @@ from flax import linen as nn
 from .layers import SequenceLayer
 from jax.nn.initializers import lecun_normal, normal, constant
 
+class RNNModel(nn.Module):
+    d_output: int
+    d_model: int
+    n_layers: int
+    downsampling: str
+    activation: str = "gelu"
+    dropout: float = 0.2
+    training: bool = True
+    mode: str = "pool"
+    prenorm: bool = False
+    batchnorm: bool = False
+    bn_momentum: float = 0.9
+    step_rescale: float = 1.0
+    num_days: int = 1
+    d_input: int = 256
+    
+    @nn.compact
+    def downsampling_method(self, x, neural_pad):
+        if self.downsampling == 'none':
+            for layer in self.layers:
+                x, neural_pad = layer(x, neural_pad, False)
+            x = x[::4]
+        else:
+            if self.downsampling == 'standard':
+                # standard
+                for i in range(len(self.layers)):
+                    if i == 0:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == len(self.layers) - 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
+                    
+            elif self.downsampling == 'beginning':
+                # beginning
+                for i in range(len(self.layers)):
+                    if i == 0:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
+                    
+            elif self.downsampling == 'end':
+                # end
+                for i in range(len(self.layers)):
+                    if i == len(self.layers) - 2:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == len(self.layers) - 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
+                        
+            elif self.downsampling == 'middle':
+                # middle
+                for i in range(len(self.layers)):
+                    if i == len(self.layers)/2:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == len(self.layers)/2 - 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
 
+        return x
+    
+    def __call__(self, x, batch_neural_pad, batch_integration_timesteps, batch_day_idxs):
+        x = jax.vmap(lambda u: self.day_weights[day_idx] @ u)(x) + self.day_biases[day_idx]
+        x = downsampling_method(self, x, batch_neural_pad)
+        rnn_cell = nn.rnn(RNNCell, name='rnn_cell')(self.hidden_size)
+        rnn_out, final_state = rnn_cell(x)
+        output = nn.Dense(self.output_size)(rnn_out[:, -1, :])
+        return output
+    
+    
 class StackedEncoderModel(nn.Module):
     """ Defines a stack of S5 layers to be used as an encoder.
         Args:
@@ -23,6 +96,7 @@ class StackedEncoderModel(nn.Module):
                                     the speech commands benchmark
     """
     ssm: nn.Module
+    downsampling: str
     d_model: int
     n_layers: int
     activation: str = "gelu"
@@ -53,18 +127,52 @@ class StackedEncoderModel(nn.Module):
             for _ in range(self.n_layers)
         ]
 
-    def __call__(self, x, integration_timesteps):
-        """
-        Compute the LxH output of the stacked encoder given an Lxd_input
-        input sequence.
-        Args:
-             x (float32): input sequence (L, d_input)
-        Returns:
-            output sequence (float32): (L, d_model)
-        """
-        x = self.encoder(x)
-        for layer in self.layers:
-            x = layer(x)
+    def __call__(self, x, neural_pad):
+        if self.downsampling == 'none':
+            for layer in self.layers:
+                x, neural_pad = layer(x, neural_pad, False)
+            x = x[::4]
+        else:
+            if self.downsampling == 'standard':
+                # standard
+                for i in range(len(self.layers)):
+                    if i == 0:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == len(self.layers) - 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
+                    
+            elif self.downsampling == 'beginning':
+                # beginning
+                for i in range(len(self.layers)):
+                    if i == 0:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
+                    
+            elif self.downsampling == 'end':
+                # end
+                for i in range(len(self.layers)):
+                    if i == len(self.layers) - 2:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == len(self.layers) - 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
+                        
+            elif self.downsampling == 'middle':
+                # middle
+                for i in range(len(self.layers)):
+                    if i == len(self.layers)/2:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    elif i == len(self.layers)/2 - 1:
+                        x, neural_pad = self.layers[i](x, neural_pad, True)
+                    else:
+                        x, neural_pad = self.layers[i](x, neural_pad, False)
+
         return x
 
 
@@ -318,7 +426,6 @@ class RetrievalModel(nn.Module):
 
 from flax import linen as nn
 
-
 class SpeechBCIDecoderModel(nn.Module):
     """
     Implement Speech BCI Decoder Model with
@@ -353,6 +460,7 @@ class SpeechBCIDecoderModel(nn.Module):
     d_model: int
     n_layers: int
     padded: bool
+    downsampling: str
     activation: str = "gelu"
     dropout: float = 0.2
     training: bool = True
@@ -380,6 +488,7 @@ class SpeechBCIDecoderModel(nn.Module):
                             batchnorm=self.batchnorm,
                             bn_momentum=self.bn_momentum,
                             step_rescale=self.step_rescale,
+                            downsampling=self.downsampling
                                         )
         self.decoder = nn.Dense(self.d_output)
 
@@ -389,7 +498,7 @@ class SpeechBCIDecoderModel(nn.Module):
             "day_biases", constant(0.0), (self.num_days, self.d_input))
 
 
-    def __call__(self, x, integration_timesteps, day_idx):
+    def __call__(self, x, neural_pad, integration_timesteps, day_idx):
         """
         Compute the size d_output log softmax output given a
         Lxd_input input sequence.
@@ -398,18 +507,15 @@ class SpeechBCIDecoderModel(nn.Module):
         Returns:
             output (float32): (d_output)
         """
-        # Updated Code
-        # if self.padded:
-            # x, length = x  # input consists of data and prepadded seq 
         x = jax.vmap(lambda u: self.day_weights[day_idx] @ u)(x) + self.day_biases[day_idx]
-        x = self.encoder(x, integration_timesteps)
+        x = self.encoder(x, neural_pad, integration_timesteps)
         x = self.decoder(x)
         return nn.log_softmax(x, axis=-1)
 
 # Here we call vmap to parallelize across a batch of input sequences
 BatchSpeechBCIDecoderModel = nn.vmap(
     SpeechBCIDecoderModel,
-    in_axes=(0, 0, 0),
+    in_axes=(0, 0, 0, 0),
     out_axes=0,
     variable_axes={"params": None, "dropout": None, 'batch_stats': None, "cache": 0, "prime": None},
     split_rngs={"params": False, "dropout": True}, axis_name='batch')

@@ -112,6 +112,7 @@ def train(args):
             prenorm=args.prenorm,
             batchnorm=args.batchnorm,
             bn_momentum=args.bn_momentum,
+            downsampling=args.downsampling,
     )
 
     # initialize training state
@@ -156,7 +157,7 @@ def train(args):
 
         #  Passing this around to manually handle per step learning rate decay.
         # lr_params = (decay_function, ssm_lr, lr, step, end_step, args.opt_config, args.lr_min)
-        opt_params = (decay_function, ssm_lr, lr, step, end_step, opt_config, lr_min, gauss_std, bias_std, smoothing, smooth_sigma, smooth_width) 
+        opt_params = (decay_function, ssm_lr, lr, step, end_step, args.opt_config, args.lr_min, args.gauss_std, args.bias_std, args.smoothing, args.smooth_sigma, args.smooth_width) 
 
         train_rng, skey = random.split(train_rng)
         state, train_loss, step = train_epoch(state,
@@ -185,10 +186,7 @@ def train(args):
 
         # For early stopping purposes
         if val_loss < best_val_loss:
-#             count = 0
             best_val_loss = val_loss
-#         else:
-#             count += 1
 
         if val_acc > best_acc:
             count = 0

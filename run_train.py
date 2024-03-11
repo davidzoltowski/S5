@@ -2,6 +2,7 @@ import argparse
 from s5.utils.util import str2bool
 from s5.train import train
 from s5.dataloading import Datasets
+from s5.train_RNN import train_RNN
 
 if __name__ == "__main__":
 
@@ -107,5 +108,20 @@ if __name__ == "__main__":
 						help="gaussian smoothing sigma")
 	parser.add_argument("--smooth_width", type=int, default=20,
 						help="gaussian smoothing width")
-
-	train(parser.parse_args())
+	parser.add_argument("--downsampling", type=str, default="standard", choices=['standard',
+																			   'beginning',
+																			   'end',
+																			   'middle',
+                                                                                'none'],
+						help="Opt configurations: \\ " \
+			   "standard:       after the first layer and before the last year \\" \
+	  	       "beginning:      during the first two layers \\" \
+	  	       "end:            during the last two layers \\" \
+	  	       "middle:         during middle two layers"\
+               "none:           no downsampling")
+	parser.add_argument("--run_rnn", type=bool, default=False,
+						help="run the RNN instead of s5")
+	if parser.parse_args().run_rnn:
+		train_RNN(parser.parse_args())
+	else:
+		train(parser.parse_args())

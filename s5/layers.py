@@ -1,6 +1,6 @@
 from flax import linen as nn
 import jax
-
+import jax.numpy as np
 
 class SequenceLayer(nn.Module):
     """ Defines a single S5 layer, with S5 SSM, nonlinearity,
@@ -52,7 +52,8 @@ class SequenceLayer(nn.Module):
             deterministic=not self.training,
         )
 
-    def __call__(self, x):
+    def __call__(self, x, neural_pad, DownSamplingLayer):
+    # def __call__(self, x):
         """
         Compute the LxH output of S5 layer given an LxH input.
         Args:
@@ -60,6 +61,23 @@ class SequenceLayer(nn.Module):
         Returns:
             output sequence (float32): (L, d_model)
         """
+        
+        def averageSequence(neuralData, neuralPadding):
+            mask = 1.0 - neuralPadding
+            # Works given that the length of the sequence is even (In the case it is hard coded to 920)
+            maskEven = mask[::2]
+            maskOdd = mask[1::2]
+            maskEven_reshaped = maskEven[:, np.newaxis]
+            maskOdd_reshaped = maskOdd[:, np.newaxis]
+
+            neuralData_even = neuralData[::2]
+            neuralData_odd = neuralData[1::2]
+            num = neuralData_even + neuralData_odd
+            den = maskEven_reshaped + maskOdd_reshaped
+            
+            ds_neuralData = np.where(den > 1, num / 2, num)
+            return ds_neuralData     
+            
         skip = x
         if self.prenorm:
             x = self.norm(x)
@@ -87,80 +105,9 @@ class SequenceLayer(nn.Module):
         x = skip + x
         if not self.prenorm:
             x = self.norm(x)
-        return x
-
-class DownSamplingLayer(nn.Module):
-    """ Defines a single S5 layer, with S5 SSM, nonlinearity,
-            dropout, batch/layer norm, etc.
-        Args:
-            ssm         (nn.Module): the SSM to be used (i.e. S5 ssm)
-            dropout     (float32):  dropout rate
-            d_model     (int32):    this is the feature size of the layer inputs and outputs
-                                    we usually refer to this size as H
-            activation  (string):   Type of activation function to use
-            training    (bool):     whether in training mode or not
-            prenorm     (bool):     apply prenorm if true or postnorm if false
-            batchnorm   (bool):     apply batchnorm if true or layernorm if false
-            bn_momentum (float32):  the batchnorm momentum if batchnorm is used
-            step_rescale  (float32):  allows for uniformly changing the timescale parameter,
-                                    e.g. after training on a different resolution for
-                                    the speech commands benchmark
-    """
-    ssm: nn.Module
-#     dropout: float
-    d_model: int
-#     activation: str = "gelu"
-#     training: bool = True
-#     prenorm: bool = False
-#     batchnorm: bool = False
-#     bn_momentum: float = 0.90
-#     step_rescale: float = 1.0
-
-    def setup(self):
-        """Initializes the ssm, batch/layer norm and dropout
-        """
-        self.seq = self.ssm(step_rescale=self.step_rescale)
-
-        if self.activation in ["full_glu"]:
-            self.out1 = nn.Dense(self.d_model)
-            self.out2 = nn.Dense(self.d_model)
-        elif self.activation in ["half_glu1", "half_glu2"]:
-            self.out2 = nn.Dense(self.d_model)
-
-        if self.batchnorm:
-            self.norm = nn.BatchNorm(use_running_average=not self.training,
-                                     momentum=self.bn_momentum, axis_name='batch')
-        else:
-            self.norm = nn.LayerNorm()
-
-        self.drop = nn.Dropout(
-            self.dropout,
-            broadcast_dims=[0],
-            deterministic=not self.training,
-        )
-
-    def __call__(self, x, neural_pad):
-        """
-        Compute the LxH output of S5 layer given an LxH input.
-        Args:
-             x (float32): input sequence (L, d_model)
-        Returns:
-            output sequence (float32): (L, d_model)
-        """
-
-        def averageSequence(neuralData, neuralPadding):
-            mask = 1.0 - neuralPadding
-            if neuralData[0] % 2 == 0：
-                maskEven = mask[::2]
-                maskOdd = mask[1::2]
-                neuralData_even = neuralData[::2]
-                neuralData_odd = neuralData[1::2]
-                num = neuralData_even * maskEven + maskOdd * neuralData_odd
-                den = maskEven + maskOdd
-                ds_neuralData = np.where(den > 0, num / den, 0)
-                ds_neuralPadding = np.where(den > 0, 0, 1)
-                return ds_neuralData, ds_neuralPadding
             
-        x = averageSequence (x, neural_pad)
+        if DownSamplingLayer:
+            x = averageSequence(x, neural_pad)
+            neural_pad = neural_pad[::2]        
         
-        return x
+        return x, neural_pad

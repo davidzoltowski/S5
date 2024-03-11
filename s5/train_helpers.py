@@ -90,15 +90,15 @@ def create_train_state(model_cls,
                        rng,
                        padded,
                        retrieval,
-                       in_dim=1,
-                       bsz=128,
-                       seq_len=784,
-                       weight_decay=0.01,
-                       batchnorm=False,
-                       opt_config="standard",
-                       ssm_lr=1e-3,
-                       lr=1e-3,
-                       dt_global=False
+                       in_dim,
+                       bsz,
+                       seq_len,
+                       weight_decay,
+                       batchnorm,
+                       opt_config,
+                       ssm_lr,
+                       lr,
+                       dt_global
                        ):
     """
     Initializes the training state using optax
@@ -129,14 +129,17 @@ def create_train_state(model_cls,
             integration_timesteps = np.ones((bsz, seq_len,))
     else:
         dummy_input = np.ones((bsz, seq_len, in_dim))
+        # downsampling addition
+        dummy_padding = np.ones((bsz, seq_len))
         integration_timesteps = np.ones((bsz, seq_len, ))
         day_idxs = np.zeros((bsz,)).astype(int)
+        
 
     model = model_cls(training=True)
     init_rng, dropout_rng = jax.random.split(rng, num=2)
     variables = model.init({"params": init_rng,
                             "dropout": dropout_rng},
-                           dummy_input, integration_timesteps, day_idxs,
+                           dummy_input, dummy_padding, integration_timesteps, day_idxs, 
                            )
     if batchnorm:
         params = variables["params"].unfreeze()
@@ -285,7 +288,7 @@ beam_search_decoder = ctc_decoder(
     tokens=ALPHABET,
     lm=None,
     nbest=1,
-    beam_size=50,
+    beam_size=41,
     sil_token=' ',
 )
 
@@ -299,16 +302,9 @@ def compute_ctc_accuracy(logits, label, neural_padding, label_padding):
     beam_search_result = beam_search_decoder(logits_torch)
     tokens = beam_search_result[0][0].tokens
     predict = [ALPHABET[token] for token in tokens]
-#     print('predict')
-#     print(predict)
     actual_label = label[label_padding==0].astype(int)
     actual_phonemes = [ALPHABET[token] for token in actual_label]
-#     print('actual_phonemes')
-#     print(actual_phonemes)
-    # outputs an array with edit distance and length
     edit_distance = torchaudio.functional.edit_distance(actual_phonemes, predict)
-#     print('edit_distance')
-#     print(edit_distance)
     length = len(actual_phonemes)
     return [edit_distance, length]
 
@@ -423,6 +419,8 @@ def validate(state, model, testloader, seq_len, in_dim, batchnorm, step_rescale=
             eval_step(inputs, labels, integration_timesteps, state, model, batchnorm, neural_pad, sentence_pad, day_idxs)
         losses = np.append(losses, loss)
         # downsample pad
+#         if not model.downsampling == 'none':
+#             neural_pad = neural_pad[:, ::4]
         neural_pad = neural_pad[:, ::4]
         acc = np.array([compute_ctc_accuracy(_logit, _label, _neural_padding, _label_padding) 
             for (_logit, _label, _neural_padding, _label_padding) in 
@@ -447,35 +445,28 @@ def train_step(state,
                batchnorm,
                ):
 
-    # downsample
-    # batch_neural_pad = batch_neural_pad[:, ::4]
-
     """Performs a single training step given a batch of data"""
     def loss_fn(params, batch_neural_pad):
         if batchnorm:
             logits, mod_vars = model.apply(
                 {"params": params, "batch_stats": state.batch_stats},
-                batch_inputs, batch_integration_timesteps, batch_day_idxs,
+                batch_inputs, batch_neural_pad, batch_integration_timesteps, batch_day_idxs,
                 rngs={"dropout": rng},
                 mutable=["intermediates", "batch_stats"],
             )
         else:
             logits, mod_vars = model.apply(
                 {"params": params},
-                batch_inputs, batch_integration_timesteps, batch_day_idxs,
+                batch_inputs, batch_neural_pad, batch_integration_timesteps, batch_day_idxs, 
                 rngs={"dropout": rng},
                 mutable=["intermediates"],
             )
 
         # downsample
-        logits = logits[:, ::4, :]
-        downSample_neural_pad = batch_neural_pad[:, ::4]
+        batch_neural_pad = batch_neural_pad[:, ::4]
+      
 
-<<<<<<< HEAD
-        loss = np.mean(ctc_loss(logits, downSample_neural_pad, batch_labels, batch_sentence_pad))
-=======
         loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad) / np.sum(1.0 - batch_sentence_pad, axis=1))
->>>>>>> b64f094fec9ac999866ebfe677abf9190db39f06
 
         return loss, (mod_vars, logits)
 
@@ -497,21 +488,21 @@ def eval_step(batch_inputs,
               batchnorm,
               batch_neural_pad,
               batch_sentence_pad,
-              batch_day_idxs
+              batch_day_idxs,
               ):
+    
     if batchnorm:
         logits = model.apply({"params": state.params, "batch_stats": state.batch_stats},
-                             batch_inputs, batch_integration_timesteps, batch_day_idxs,
+                             batch_inputs, batch_neural_pad, batch_integration_timesteps, batch_day_idxs,
                              )
     else:
         logits = model.apply({"params": state.params},
-                             batch_inputs, batch_integration_timesteps, batch_day_idxs,
+                             batch_inputs, batch_neural_pad, batch_integration_timesteps, batch_day_idxs,
                              )
 
     # downsample
-    logits = logits[:, ::4, :]
     batch_neural_pad = batch_neural_pad[:, ::4]
 
     loss = np.mean(ctc_loss(logits, batch_neural_pad, batch_labels, batch_sentence_pad) / np.sum(1.0 - batch_sentence_pad, axis=1))
 
-    return losses, logits
+    return loss, logits
